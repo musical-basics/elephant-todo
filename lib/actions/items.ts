@@ -211,7 +211,7 @@ export async function createNewItem(name: string, projectId?: string | null) {
       }
 
       await reprocessList(user.id);
-      await reindexMasterList(user.id);
+
 
       revalidatePath('/dashboard');
       revalidatePath('/master-list');
@@ -230,7 +230,7 @@ export async function createNewItem(name: string, projectId?: string | null) {
         return { success: false, error: 'Project not found' };
       }
 
-      const { data: newItem, error: itemError} = await adminClient
+      const { data: newItem, error: itemError } = await adminClient
         .from('items')
         .insert({
           user_id: user.id,
@@ -689,13 +689,13 @@ export async function completeItemAndNextFromProject(masterListPosition: number 
 
   if (masterListEntry.item_id) {
     itemToComplete = masterListEntry.item_id;
-    
+
     const { data: item } = await adminClient
       .from('items')
       .select('project_id')
       .eq('id', itemToComplete)
       .single();
-    
+
     currentProjectId = item?.project_id || null;
   } else if (masterListEntry.project_placeholder_id) {
     const parts = masterListEntry.project_placeholder_id.split('-');
@@ -802,7 +802,7 @@ export async function completeItemAndNextFromProject(masterListPosition: number 
       const parts = placeholder.project_placeholder_id!.split('-');
       const index = parseInt(parts[parts.length - 1]);
       const newIndex = index - 1;
-      
+
       if (newIndex > 0) {
         const newPlaceholderId = `${currentProjectId}-${newIndex}`;
         await adminClient
