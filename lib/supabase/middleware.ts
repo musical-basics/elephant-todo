@@ -28,7 +28,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   let user = null;
-  
+
   try {
     const { data, error } = await supabase.auth.getUser();
     if (!error) {
@@ -51,10 +51,15 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup'))) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+  // If user is logged in and on the homepage or auth pages, redirect to dashboard
+  if (user) {
+    if (request.nextUrl.pathname === '/' ||
+      request.nextUrl.pathname.startsWith('/auth/login') ||
+      request.nextUrl.pathname.startsWith('/auth/signup')) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
