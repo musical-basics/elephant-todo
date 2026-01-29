@@ -106,7 +106,7 @@ export default function ProjectDetailClient({
   };
 
   const handleInputChange = (id: number, value: string) => {
-    setItemInputs(itemInputs.map(input => 
+    setItemInputs(itemInputs.map(input =>
       input.id === id ? { ...input, value } : input
     ));
   };
@@ -140,58 +140,161 @@ export default function ProjectDetailClient({
         <Link href="/projects">
           <button type="button" className="btn-back">← Back to Projects</button>
         </Link>
-        <h1 className="page-title">Edit Project</h1>
-        <p className="page-subtitle">{project.name}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+          <div>
+            <h1 className="page-title" style={{ margin: 0 }}>Edit Project</h1>
+            <p className="page-subtitle" style={{ margin: 0 }}>{project.name}</p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+            <form action={handleUpdateName} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                defaultValue={project.name}
+                required
+                placeholder="Name"
+                disabled={isPending}
+                style={{ padding: '0.4rem 0.6rem', fontSize: '0.9rem', width: '200px' }}
+              />
+              <button type="submit" className="btn-primary" disabled={isPending} style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}>
+                {isPending ? '...' : 'Save'}
+              </button>
+            </form>
+            <div style={{ width: '1px', height: '24px', backgroundColor: '#dee2e6' }}></div>
+            <form action={handleUpdatePriority} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+              <label htmlFor="priority" style={{ fontSize: '0.85rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Priority:</label>
+              <select
+                id="priority"
+                name="priority"
+                defaultValue={project.priority.toString()}
+                disabled={isPending}
+                onChange={(e) => {
+                  const formData = new FormData();
+                  formData.append('priority', e.target.value);
+                  handleUpdatePriority(formData);
+                }}
+                style={{ padding: '0.4rem 0.4rem', fontSize: '0.9rem', width: 'auto' }}
+              >
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </form>
+          </div>
+        </div>
       </div>
 
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Project Name</h2>
-        </div>
-        <form action={handleUpdateName}>
-          <div className="form-group">
-            <label htmlFor="name">Name</label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              defaultValue={project.name}
-              required
-              placeholder="Enter project name"
-              disabled={isPending}
-            />
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={isPending}>
-              {isPending ? 'Updating...' : 'Update Name'}
-            </button>
-          </div>
-        </form>
-      </section>
+
 
       <section className="section">
         <div className="section-header">
-          <h2 className="section-title">Priority</h2>
+          <h2 className="section-title">Add Items To Project</h2>
         </div>
-        <form action={handleUpdatePriority}>
-          <div className="form-group">
-            <label htmlFor="priority">Priority</label>
-            <select
-              id="priority"
-              name="priority"
-              defaultValue={project.priority.toString()}
-              disabled={isPending}
+
+        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', fontWeight: '600' }}>
+            Bulk Add (Paste from Excel)
+          </h3>
+          <p style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '0.75rem' }}>
+            Paste a list of items (one per line). Works great with copy-paste from Excel or any text editor.
+          </p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder="Paste your list here (one item per line)&#10;Example:&#10;Write script for video&#10;Plan out video scenes&#10;shoot video scene 1"
+            disabled={isAddingItems}
+            style={{
+              width: '100%',
+              minHeight: '120px',
+              padding: '0.75rem',
+              fontSize: '0.95rem',
+              border: '1px solid #ced4da',
+              borderRadius: '6px',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              marginBottom: '0.75rem'
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleBulkPaste}
+            disabled={isAddingItems || !bulkText.trim()}
+            className="btn-primary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+          >
+            Load Items from List
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#e7f3ff', borderRadius: '6px', border: '1px solid #b3d9ff' }}>
+          <p style={{ fontSize: '0.875rem', margin: 0, color: '#004085' }}>
+            <strong>Or add items individually below:</strong>
+          </p>
+        </div>
+
+        <form id="add-item-form" action={handleAddItems}>
+          {itemInputs.map((input, index) => (
+            <div key={input.id} className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor={`item_name_${input.id}`}>
+                  Item {index + 1} Name
+                </label>
+                <input
+                  id={`item_name_${input.id}`}
+                  name={`name_${index}`}
+                  type="text"
+                  value={input.value}
+                  onChange={(e) => handleInputChange(input.id, e.target.value)}
+                  placeholder="Enter item name"
+                  disabled={isAddingItems}
+                />
+              </div>
+              {itemInputs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeItemInput(input.id)}
+                  className="btn-danger"
+                  style={{ marginBottom: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  disabled={isAddingItems}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="form-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {itemInputs.length < 50 && (
+              <button
+                type="button"
+                onClick={addItemInput}
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                disabled={isAddingItems}
+              >
+                + Add Another Item
+              </button>
+            )}
+            {itemInputs.length > 1 && itemInputs.some(input => input.value.trim() !== '') && (
+              <button
+                type="button"
+                onClick={() => setItemInputs([{ id: Date.now(), value: '' }])}
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                disabled={isAddingItems}
+              >
+                Clear All
+              </button>
+            )}
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', cursor: isAddingItems ? 'wait' : 'pointer' }}
+              disabled={isAddingItems}
             >
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={isPending}>
-              {isPending ? 'Updating...' : 'Update Priority'}
+              {isAddingItems ? 'Adding...' : `Add ${itemInputs.length} Item${itemInputs.length > 1 ? 's' : ''}`}
             </button>
           </div>
         </form>
@@ -301,117 +404,6 @@ export default function ProjectDetailClient({
             </table>
           </div>
         )}
-      </section>
-
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Add Items To Project</h2>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', fontWeight: '600' }}>
-            Bulk Add (Paste from Excel)
-          </h3>
-          <p style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '0.75rem' }}>
-            Paste a list of items (one per line). Works great with copy-paste from Excel or any text editor.
-          </p>
-          <textarea
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            placeholder="Paste your list here (one item per line)&#10;Example:&#10;Write script for video&#10;Plan out video scenes&#10;shoot video scene 1"
-            disabled={isAddingItems}
-            style={{
-              width: '100%',
-              minHeight: '120px',
-              padding: '0.75rem',
-              fontSize: '0.95rem',
-              border: '1px solid #ced4da',
-              borderRadius: '6px',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              marginBottom: '0.75rem'
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleBulkPaste}
-            disabled={isAddingItems || !bulkText.trim()}
-            className="btn-primary"
-            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-          >
-            Load Items from List
-          </button>
-        </div>
-
-        <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#e7f3ff', borderRadius: '6px', border: '1px solid #b3d9ff' }}>
-          <p style={{ fontSize: '0.875rem', margin: 0, color: '#004085' }}>
-            <strong>Or add items individually below:</strong>
-          </p>
-        </div>
-
-        <form id="add-item-form" action={handleAddItems}>
-          {itemInputs.map((input, index) => (
-            <div key={input.id} className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <label htmlFor={`item_name_${input.id}`}>
-                  Item {index + 1} Name
-                </label>
-                <input
-                  id={`item_name_${input.id}`}
-                  name={`name_${index}`}
-                  type="text"
-                  value={input.value}
-                  onChange={(e) => handleInputChange(input.id, e.target.value)}
-                  placeholder="Enter item name"
-                  disabled={isAddingItems}
-                />
-              </div>
-              {itemInputs.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeItemInput(input.id)}
-                  className="btn-danger"
-                  style={{ marginBottom: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                  disabled={isAddingItems}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-          <div className="form-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {itemInputs.length < 50 && (
-              <button
-                type="button"
-                onClick={addItemInput}
-                className="btn-secondary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                disabled={isAddingItems}
-              >
-                + Add Another Item
-              </button>
-            )}
-            {itemInputs.length > 1 && itemInputs.some(input => input.value.trim() !== '') && (
-              <button
-                type="button"
-                onClick={() => setItemInputs([{ id: Date.now(), value: '' }])}
-                className="btn-secondary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                disabled={isAddingItems}
-              >
-                Clear All
-              </button>
-            )}
-            <button 
-              type="submit" 
-              className="btn-primary" 
-              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', cursor: isAddingItems ? 'wait' : 'pointer' }}
-              disabled={isAddingItems}
-            >
-              {isAddingItems ? 'Adding...' : `Add ${itemInputs.length} Item${itemInputs.length > 1 ? 's' : ''}`}
-            </button>
-          </div>
-        </form>
       </section>
     </div>
   );
