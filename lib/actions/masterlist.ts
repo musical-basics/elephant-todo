@@ -135,8 +135,9 @@ export async function getFirstMasterListEntry() {
     .select('*')
     .eq('user_id', user.id)
     .eq('list_id', listId)
-    .eq('position', 1)
-    .single();
+    .order('position', { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (fetchError || !entry) {
     return { data: null, error: fetchError?.message || 'No entries found' };

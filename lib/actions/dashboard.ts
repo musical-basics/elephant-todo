@@ -7,10 +7,14 @@ import { mapMasterListItem } from '@/lib/utils/masterlist';
 export async function getDashboardStats(userId: string) {
   const supabase = await createClient();
 
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
   const { data: masterListItems } = await supabase
     .from('master_list')
     .select('*')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .eq('list_id', listId);
 
   const itemsToday = masterListItems?.length || 0;
 
@@ -18,6 +22,7 @@ export async function getDashboardStats(userId: string) {
     .from('projects')
     .select('id')
     .eq('user_id', userId)
+    .eq('list_id', listId)
     .eq('status', 'Active');
 
   const activeProjectsCount = activeProjects?.length || 0;
@@ -47,10 +52,14 @@ export async function getDashboardStats(userId: string) {
 export async function getNextItems(userId: string, limit: number) {
   const adminClient = createAdminClient();
 
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
   const { data: masterListEntries } = await adminClient
     .from('master_list')
     .select('*')
     .eq('user_id', userId)
+    .eq('list_id', listId)
     .order('position', { ascending: true })
     .limit(limit);
 
@@ -79,10 +88,14 @@ export async function getNextItems(userId: string, limit: number) {
 export async function getActiveProjectsOverview(userId: string) {
   const supabase = await createClient();
 
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
   const { data: projects } = await supabase
     .from('projects')
     .select('*')
     .eq('user_id', userId)
+    .eq('list_id', listId)
     .eq('status', 'Active')
     .order('priority', { ascending: false });
 
