@@ -91,9 +91,17 @@ export async function getActiveProjectsOverview(userId: string) {
   const { getActiveListId } = await import('@/lib/utils/list-context');
   const listId = await getActiveListId();
 
+  // optimized: Fetch projects and ALL their linked items/statuses in one single query
   const { data: projects } = await supabase
     .from('projects')
-    .select('*')
+    .select(`
+      *,
+      project_item_links (
+        items (
+          status
+        )
+      )
+    `)
     .eq('user_id', userId)
     .eq('list_id', listId)
     .eq('status', 'Active')
@@ -103,35 +111,33 @@ export async function getActiveProjectsOverview(userId: string) {
     return [];
   }
 
-  const projectsWithProgress = await Promise.all(
-    projects.map(async (project) => {
-      const { data: allItems } = await supabase
-        .from('project_item_links')
-        .select(`
-          item_id,
-          items!inner(id, status)
-        `)
-        .eq('project_id', project.id);
+  // Calculate stats in memory (much faster than DB roundtrips)
+  const projectsWithProgress = projects.map((project: any) => {
+    // Flatten the structure: project -> links -> items
+    const allLinks = project.project_item_links || [];
 
-      const totalItems = allItems?.length || 0;
-      const completedItems =
-        allItems?.filter((link: any) => link.items?.status === 'Completed').length || 0;
-      const activeItems =
-        allItems?.filter((link: any) => link.items?.status === 'Active').length || 0;
+    const totalItems = allLinks.length;
+    let completedItems = 0;
+    let activeItems = 0;
 
-      const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+    allLinks.forEach((link: any) => {
+      const status = link.items?.status;
+      if (status === 'Completed') completedItems++;
+      if (status === 'Active') activeItems++;
+    });
 
-      return {
-        id: project.id,
-        name: project.name,
-        priority: project.priority,
-        totalItems,
-        completedItems,
-        activeItems,
-        progress,
-      };
-    })
-  );
+    const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+    return {
+      id: project.id,
+      name: project.name,
+      priority: project.priority,
+      totalItems,
+      completedItems,
+      activeItems,
+      progress,
+    };
+  });
 
   return projectsWithProgress;
 }

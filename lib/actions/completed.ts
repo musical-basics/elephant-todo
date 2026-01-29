@@ -41,9 +41,13 @@ export async function getCompletedProjects(userId: string) {
   try {
     const adminClient = createAdminClient();
 
+    // optimized: fetch project AND count of items in one go
+    // Note: We use 'head: true' logic via count inside select if supported,
+    // or we just fetch the relations. Supabase/PostgREST syntax for count is:
+    // select('*, items(count)')
     const { data: projects, error: projectsError } = await adminClient
       .from('projects')
-      .select('*')
+      .select('*, items(count)')
       .eq('user_id', userId)
       .eq('status', 'Completed')
       .order('created_at', { ascending: false });
@@ -56,19 +60,13 @@ export async function getCompletedProjects(userId: string) {
       return { success: true, data: [] };
     }
 
-    const projectsWithCounts = await Promise.all(
-      projects.map(async (project) => {
-        const { data: items } = await adminClient
-          .from('items')
-          .select('id')
-          .eq('project_id', project.id);
-
-        return {
-          ...project,
-          itemCount: items?.length || 0,
-        };
-      })
-    );
+    // Map the result to match your frontend expectation
+    const projectsWithCounts = projects.map((project: any) => ({
+      ...project,
+      // Supabase returns [{ count: 5 }] for relations, or just the number depending on version
+      // The safest way to handle the count response:
+      itemCount: project.items?.[0]?.count || 0,
+    }));
 
     return { success: true, data: projectsWithCounts };
   } catch (error) {
@@ -80,9 +78,14 @@ export async function getCompletedProjectItems(userId: string, projectId?: strin
   try {
     const adminClient = createAdminClient();
 
+    // optimized: Fetch items and join with their parent project name immediately
     let itemsQuery = adminClient
       .from('items')
-      .select('*, project_item_links(sequence)')
+      .select(`
+        *, 
+        project_item_links(sequence),
+        projects(name)
+      `)
       .eq('user_id', userId)
       .eq('status', 'Completed')
       .not('project_id', 'is', null);
@@ -111,25 +114,20 @@ export async function getCompletedProjectItems(userId: string, projectId?: strin
       return { success: true, data: [] };
     }
 
-    const projectIds = [...new Set(items.map(item => item.project_id))];
-    
-    const { data: projects } = await adminClient
-      .from('projects')
-      .select('id, name')
-      .in('id', projectIds);
-
-    const projectMap = new Map(projects?.map(p => [p.id, p.name]) || []);
-
+    // The grouping logic remains similar but relies on the data we just fetched
     const groupedItems = items.reduce((acc: any, item: any) => {
-      const projectId = item.project_id;
-      if (!acc[projectId]) {
-        acc[projectId] = {
-          projectId,
-          projectName: projectMap.get(projectId) || 'Unknown Project',
+      const pId = item.project_id;
+      // Access the joined project name directly
+      const pName = item.projects?.name || 'Unknown Project';
+
+      if (!acc[pId]) {
+        acc[pId] = {
+          projectId: pId,
+          projectName: pName,
           items: [],
         };
       }
-      acc[projectId].items.push({
+      acc[pId].items.push({
         id: item.id,
         name: item.name,
         dateCompleted: item.date_completed,
