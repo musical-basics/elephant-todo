@@ -29,36 +29,30 @@ export async function reprocessList(userId: string): Promise<void> {
 
     const tnml = await getTNML(userId);
 
-    // FIX START: Bootstrap the list if it is empty
+    // FIX 1: Bootstrap empty list (The "Chicken and Egg" fix)
     if (tnml === 0) {
-      // Sort projects by priority (descending) so the most important project goes first
       const sortedProjects = [...projects].sort((a, b) => b.priority - a.priority);
 
       let bootstrapped = false;
       for (const project of sortedProjects) {
-        // Try to activate the next item from this project
-        const itemActivated = await activateNextProjectItem(userId, project.id, 0);
+        // PASS listId here
+        const itemActivated = await activateNextProjectItem(userId, project.id, 0, listId);
         if (itemActivated) {
           itemsAdded = true;
           bootstrapped = true;
-          break; // We added one, break to restart the main loop with tnml = 1
+          break;
         }
       }
 
-      if (!bootstrapped) {
-        // If we couldn't add items from ANY project, break the loop
-        break;
-      } else {
-        // If we added an item, continue to the next iteration of the while loop
-        continue;
-      }
+      if (!bootstrapped) break;
+      else continue;
     }
-    // FIX END
 
     const { data: firstEntry } = await adminClient
       .from('master_list')
       .select('project_placeholder_id')
       .eq('user_id', userId)
+      .eq('list_id', listId) // Filter by list ID
       .order('position', { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -72,12 +66,13 @@ export async function reprocessList(userId: string): Promise<void> {
           item_id,
           items!inner(id, status)
         `)
-        .eq('project_id', projectId)
+        .eq('project_item_links.project_id', projectId) // Disambiguate column
         .eq('items.status', 'Active')
         .limit(1);
 
       if (!activeItems || activeItems.length === 0) {
-        const itemActivated = await activateNextProjectItem(userId, projectId, tnml);
+        // PASS listId here
+        const itemActivated = await activateNextProjectItem(userId, projectId, tnml, listId);
         if (itemActivated) {
           itemsAdded = true;
           continue;
@@ -86,7 +81,8 @@ export async function reprocessList(userId: string): Promise<void> {
     }
 
     for (const project of projects) {
-      const wasItemAdded = await pingProjectForItem(userId, project.id, tnml);
+      // PASS listId here
+      const wasItemAdded = await pingProjectForItem(userId, project.id, tnml, listId);
       if (wasItemAdded) {
         itemsAdded = true;
       }
@@ -94,7 +90,12 @@ export async function reprocessList(userId: string): Promise<void> {
   }
 }
 
-export async function pingProjectForItem(userId: string, projectId: string, tnml: number): Promise<boolean> {
+export async function pingProjectForItem(
+  userId: string,
+  projectId: string,
+  tnml: number,
+  listId: string // ADDED parameter
+): Promise<boolean> {
   const adminClient = createAdminClient();
 
   const plpi = await getPLPI(userId, projectId);
@@ -121,7 +122,8 @@ export async function pingProjectForItem(userId: string, projectId: string, tnml
   }
 
   if (prs > pit) {
-    const itemAdded = await activateNextProjectItem(userId, projectId, tnml);
+    // PASS listId here
+    const itemAdded = await activateNextProjectItem(userId, projectId, tnml, listId);
     return itemAdded;
   }
 
@@ -131,7 +133,8 @@ export async function pingProjectForItem(userId: string, projectId: string, tnml
 async function activateNextProjectItem(
   userId: string,
   projectId: string,
-  currentTNML: number
+  currentTNML: number,
+  listId: string // ADDED parameter
 ): Promise<boolean> {
   const adminClient = createAdminClient();
 
@@ -156,6 +159,7 @@ async function activateNextProjectItem(
       .from('master_list')
       .select('project_placeholder_id')
       .eq('user_id', userId)
+      .eq('list_id', listId) // Filter by list ID
       .not('project_placeholder_id', 'is', null);
 
     let nextIndex = 1;
@@ -175,25 +179,34 @@ async function activateNextProjectItem(
 
     const newPlaceholderId = `${projectId}-${nextIndex}`;
 
+    // FIX 2: Correctly calculate position within the specific list
     const { data: maxPosition } = await adminClient
       .from('master_list')
       .select('position')
       .eq('user_id', userId)
+      .eq('list_id', listId) // Filter by list ID
       .order('position', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     const nextPosition = (maxPosition?.position || 0) + 1;
 
-    const { data: insertResult } = await adminClient
+    // FIX 3: Include list_id in the insert
+    const { data: insertResult, error } = await adminClient
       .from('master_list')
       .insert({
         user_id: userId,
+        list_id: listId, // <-- THIS WAS MISSING
         position: nextPosition,
         item_id: null,
         project_placeholder_id: newPlaceholderId
       })
       .select();
+
+    if (error) {
+      console.error("Error inserting into master_list:", error);
+      return false;
+    }
 
     if (!insertResult || insertResult.length === 0) {
       return false;
@@ -201,7 +214,7 @@ async function activateNextProjectItem(
 
     return true;
   } catch (error) {
+    console.error("Exception in activateNextProjectItem:", error);
     return false;
   }
 }
-
