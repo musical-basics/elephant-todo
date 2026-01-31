@@ -41,15 +41,18 @@ export async function getTNML(userId: string): Promise<number> {
   return count || 0;
 }
 
-export async function getPLPI(userId: string, projectId: string): Promise<number> {
+// UPDATE: Accept listId as an optional parameter
+export async function getPLPI(userId: string, projectId: string, listId?: string): Promise<number> {
   const adminClient = createAdminClient();
-  const listId = await getActiveListId();
+
+  // Use passed listId or fetch active one
+  const targetListId = listId || await getActiveListId();
 
   const { data: allPlaceholders } = await adminClient
     .from('master_list')
     .select('position, project_placeholder_id')
     .eq('user_id', userId)
-    .eq('list_id', listId)
+    .eq('list_id', targetListId)
     .not('project_placeholder_id', 'is', null);
 
   if (!allPlaceholders || allPlaceholders.length === 0) {
@@ -61,8 +64,9 @@ export async function getPLPI(userId: string, projectId: string): Promise<number
   for (const placeholder of allPlaceholders) {
     if (placeholder.project_placeholder_id) {
       const parts = placeholder.project_placeholder_id.split('-');
-      const lastPart = parts[parts.length - 1];
+      // Handle cases where UUID contains hyphens (reassemble all parts except the last one)
       const extractedProjectId = parts.slice(0, -1).join('-');
+      const lastPart = parts[parts.length - 1];
 
       if (extractedProjectId === projectId && !isNaN(parseInt(lastPart))) {
         if (placeholder.position > maxPosition) {
@@ -179,5 +183,3 @@ export async function mapMasterListItem(masterListEntry: any): Promise<{
     return { itemName: 'Error Loading Item', projectName: null, projectId: null };
   }
 }
-
-
