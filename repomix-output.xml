@@ -120,6 +120,7 @@ types/
   index.ts
 .eslintrc.json
 .gitignore
+.repomixignore
 DATABASE_SCHEMA.sql
 middleware.ts
 next.config.js
@@ -130,6 +131,44 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path=".repomixignore">
+# Node modules
+node_modules
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Next.js
+.next
+out
+build
+dist
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea
+.vscode
+
+# Git
+.git
+
+# Environment variables (security)
+.env
+.env.local
+.env.*
+
+# Repomix output
+repomix-output.xml
+repomix-output.json
+repomix-output.txt
+
+# Generated types
+next-env.d.ts
+</file>
 
 <file path="app/api/export/route.ts">
 import { NextRequest, NextResponse } from 'next/server';
@@ -5111,427 +5150,6 @@ export default function ProjectActions({
 }
 </file>
 
-<file path="components/ProjectDetailClient.tsx">
-'use client';
-
-import { useTransition, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import {
-  updateProjectName,
-  updateProjectPriority,
-  updateItemSequence,
-  deleteProjectItem,
-  updateItemName,
-} from '@/lib/actions/projects';
-
-interface ProjectDetailClientProps {
-  projectId: string;
-  project: any;
-  projectItems: any[];
-  editItemId?: string;
-  onAddItem: (formData: FormData) => void;
-}
-
-export default function ProjectDetailClient({
-  projectId,
-  project,
-  projectItems,
-  editItemId,
-  onAddItem,
-}: ProjectDetailClientProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [isAddingItems, startAddTransition] = useTransition();
-  const [optimisticItems, setOptimisticItems] = useState(projectItems);
-  const [itemInputs, setItemInputs] = useState([{ id: 1, value: '' }]);
-  const [bulkText, setBulkText] = useState('');
-
-  const handleUpdateName = async (formData: FormData) => {
-    const name = formData.get('name') as string;
-    if (name) {
-      startTransition(async () => {
-        await updateProjectName(projectId, name);
-        router.refresh();
-      });
-    }
-  };
-
-  const handleUpdatePriority = async (formData: FormData) => {
-    const priority = parseInt(formData.get('priority') as string);
-    startTransition(async () => {
-      await updateProjectPriority(projectId, priority);
-      router.refresh();
-    });
-  };
-
-
-  const handleMoveUp = async (itemId: string, index: number) => {
-    const newItems = [...optimisticItems];
-    [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
-    setOptimisticItems(newItems);
-
-    startTransition(async () => {
-      await updateItemSequence(projectId, itemId, 'up');
-      router.refresh();
-    });
-  };
-
-  const handleMoveDown = async (itemId: string, index: number) => {
-    const newItems = [...optimisticItems];
-    [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
-    setOptimisticItems(newItems);
-
-    startTransition(async () => {
-      await updateItemSequence(projectId, itemId, 'down');
-      router.refresh();
-    });
-  };
-
-  const handleDeleteItem = async (itemId: string) => {
-    setOptimisticItems(optimisticItems.filter((link: any) => link.items.id !== itemId));
-
-    startTransition(async () => {
-      await deleteProjectItem(itemId);
-      router.refresh();
-    });
-  };
-
-  const handleUpdateItemName = async (itemId: string, formData: FormData) => {
-    const name = formData.get('name') as string;
-    if (name) {
-      startTransition(async () => {
-        await updateItemName(itemId, name);
-        router.push(`/projects/${projectId}`);
-      });
-    }
-  };
-
-  const addItemInput = () => {
-    if (itemInputs.length < 10) {
-      setItemInputs([...itemInputs, { id: Date.now(), value: '' }]);
-    }
-  };
-
-  const removeItemInput = (id: number) => {
-    if (itemInputs.length > 1) {
-      setItemInputs(itemInputs.filter(input => input.id !== id));
-    }
-  };
-
-  const handleInputChange = (id: number, value: string) => {
-    setItemInputs(itemInputs.map(input => 
-      input.id === id ? { ...input, value } : input
-    ));
-  };
-
-  const handleAddItems = async (formData: FormData) => {
-    startAddTransition(async () => {
-      await onAddItem(formData);
-    });
-  };
-
-  const handleBulkPaste = () => {
-    const lines = bulkText
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-
-    if (lines.length === 0) return;
-
-    const newInputs = lines.slice(0, 50).map((line, index) => ({
-      id: Date.now() + index,
-      value: line
-    }));
-
-    setItemInputs(newInputs);
-    setBulkText('');
-  };
-
-  return (
-    <div className="page-container">
-      <div className="page-header">
-        <Link href="/projects">
-          <button type="button" className="btn-back">← Back to Projects</button>
-        </Link>
-        <h1 className="page-title">Edit Project</h1>
-        <p className="page-subtitle">{project.name}</p>
-      </div>
-
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Project Name</h2>
-        </div>
-        <form action={handleUpdateName}>
-          <div className="form-group">
-            <label htmlFor="name">Name</label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              defaultValue={project.name}
-              required
-              placeholder="Enter project name"
-              disabled={isPending}
-            />
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={isPending}>
-              {isPending ? 'Updating...' : 'Update Name'}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Priority</h2>
-        </div>
-        <form action={handleUpdatePriority}>
-          <div className="form-group">
-            <label htmlFor="priority">Priority</label>
-            <select
-              id="priority"
-              name="priority"
-              defaultValue={project.priority.toString()}
-              disabled={isPending}
-            >
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn-primary" disabled={isPending}>
-              {isPending ? 'Updating...' : 'Update Priority'}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Project Items</h2>
-        </div>
-        {!optimisticItems || optimisticItems.length === 0 ? (
-          <div className="table-empty">
-            <p>No items in this project.</p>
-          </div>
-        ) : (
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Item Name</th>
-                  <th>Status</th>
-                  <th className="actions-column">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {optimisticItems.map((link: any, index: number) => {
-                  const item = link.items;
-                  const isEditing = editItemId === item.id;
-
-                  return (
-                    <tr key={link.id}>
-                      <td>{index + 1}</td>
-                      <td>
-                        {isEditing ? (
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                            <form action={handleUpdateItemName.bind(null, item.id)} style={{ display: 'flex', gap: '0.5rem', flex: 1, margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
-                              <input
-                                name="name"
-                                type="text"
-                                defaultValue={item.name}
-                                required
-                                style={{ flex: 1, minWidth: '200px' }}
-                                disabled={isPending}
-                              />
-                              <button type="submit" className="btn-success" disabled={isPending} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>
-                                {isPending ? 'Saving...' : 'Save'}
-                              </button>
-                            </form>
-                            <Link href={`/projects/${projectId}`}>
-                              <button type="button" className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cancel</button>
-                            </Link>
-                          </div>
-                        ) : (
-                          item.name
-                        )}
-                      </td>
-                      <td>
-                        <span style={{
-                          fontSize: '0.85rem',
-                          color: item.status === 'Active' ? '#28a745' : item.status === 'Completed' ? '#007bff' : '#6c757d',
-                          fontWeight: 'bold'
-                        }}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="actions-column">
-                        {!isEditing && (
-                          <>
-                            <Link href={`/projects/${projectId}?editItem=${item.id}`}>
-                              <button type="button" className="btn-warning">Edit</button>
-                            </Link>
-                            {index > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleMoveUp(item.id, index)}
-                                className="btn-secondary"
-                                disabled={isPending}
-                              >
-                                ↑
-                              </button>
-                            )}
-                            {index < optimisticItems.length - 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleMoveDown(item.id, index)}
-                                className="btn-secondary"
-                                disabled={isPending}
-                              >
-                                ↓
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteItem(item.id)}
-                              className="btn-danger"
-                              disabled={isPending}
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="section">
-        <div className="section-header">
-          <h2 className="section-title">Add Items To Project</h2>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', fontWeight: '600' }}>
-            Bulk Add (Paste from Excel)
-          </h3>
-          <p style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '0.75rem' }}>
-            Paste a list of items (one per line). Works great with copy-paste from Excel or any text editor.
-          </p>
-          <textarea
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            placeholder="Paste your list here (one item per line)&#10;Example:&#10;Write script for video&#10;Plan out video scenes&#10;shoot video scene 1"
-            disabled={isAddingItems}
-            style={{
-              width: '100%',
-              minHeight: '120px',
-              padding: '0.75rem',
-              fontSize: '0.95rem',
-              border: '1px solid #ced4da',
-              borderRadius: '6px',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              marginBottom: '0.75rem'
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleBulkPaste}
-            disabled={isAddingItems || !bulkText.trim()}
-            className="btn-primary"
-            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-          >
-            Load Items from List
-          </button>
-        </div>
-
-        <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#e7f3ff', borderRadius: '6px', border: '1px solid #b3d9ff' }}>
-          <p style={{ fontSize: '0.875rem', margin: 0, color: '#004085' }}>
-            <strong>Or add items individually below:</strong>
-          </p>
-        </div>
-
-        <form id="add-item-form" action={handleAddItems}>
-          {itemInputs.map((input, index) => (
-            <div key={input.id} className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <label htmlFor={`item_name_${input.id}`}>
-                  Item {index + 1} Name
-                </label>
-                <input
-                  id={`item_name_${input.id}`}
-                  name={`name_${index}`}
-                  type="text"
-                  value={input.value}
-                  onChange={(e) => handleInputChange(input.id, e.target.value)}
-                  placeholder="Enter item name"
-                  disabled={isAddingItems}
-                />
-              </div>
-              {itemInputs.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeItemInput(input.id)}
-                  className="btn-danger"
-                  style={{ marginBottom: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-                  disabled={isAddingItems}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-          <div className="form-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {itemInputs.length < 50 && (
-              <button
-                type="button"
-                onClick={addItemInput}
-                className="btn-secondary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                disabled={isAddingItems}
-              >
-                + Add Another Item
-              </button>
-            )}
-            {itemInputs.length > 1 && itemInputs.some(input => input.value.trim() !== '') && (
-              <button
-                type="button"
-                onClick={() => setItemInputs([{ id: Date.now(), value: '' }])}
-                className="btn-secondary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
-                disabled={isAddingItems}
-              >
-                Clear All
-              </button>
-            )}
-            <button 
-              type="submit" 
-              className="btn-primary" 
-              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', cursor: isAddingItems ? 'wait' : 'pointer' }}
-              disabled={isAddingItems}
-            >
-              {isAddingItems ? 'Adding...' : `Add ${itemInputs.length} Item${itemInputs.length > 1 ? 's' : ''}`}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-</file>
-
 <file path="components/ProjectItemsSection.tsx">
 'use client';
 
@@ -5745,1223 +5363,6 @@ export async function requestPasswordReset(formData: FormData) {
   }
 
   redirect('/auth/forgot-password?success=' + encodeURIComponent('Password reset link has been sent to your email'));
-}
-</file>
-
-<file path="lib/actions/completed.ts">
-'use server';
-
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-
-export async function getCompletedErrands(userId: string, dateFilter?: string) {
-  try {
-    const adminClient = createAdminClient();
-
-    let query = adminClient
-      .from('items')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'Completed')
-      .is('project_id', null)
-      .order('date_completed', { ascending: false });
-
-    if (dateFilter === '7days') {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      query = query.gte('date_completed', sevenDaysAgo.toISOString());
-    } else if (dateFilter === '30days') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      query = query.gte('date_completed', thirtyDaysAgo.toISOString());
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return { success: false, error: error.message, data: [] };
-    }
-
-    return { success: true, data: data || [] };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed errands', data: [] };
-  }
-}
-
-export async function getCompletedProjects(userId: string) {
-  try {
-    const adminClient = createAdminClient();
-
-    const { data: projects, error: projectsError } = await adminClient
-      .from('projects')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'Completed')
-      .order('created_at', { ascending: false });
-
-    if (projectsError) {
-      return { success: false, error: projectsError.message, data: [] };
-    }
-
-    if (!projects || projects.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    const projectsWithCounts = await Promise.all(
-      projects.map(async (project) => {
-        const { data: items } = await adminClient
-          .from('items')
-          .select('id')
-          .eq('project_id', project.id);
-
-        return {
-          ...project,
-          itemCount: items?.length || 0,
-        };
-      })
-    );
-
-    return { success: true, data: projectsWithCounts };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed projects', data: [] };
-  }
-}
-
-export async function getCompletedProjectItems(userId: string, projectId?: string, dateFilter?: string) {
-  try {
-    const adminClient = createAdminClient();
-
-    let itemsQuery = adminClient
-      .from('items')
-      .select('*, project_item_links(sequence)')
-      .eq('user_id', userId)
-      .eq('status', 'Completed')
-      .not('project_id', 'is', null);
-
-    if (projectId) {
-      itemsQuery = itemsQuery.eq('project_id', projectId);
-    }
-
-    if (dateFilter === '7days') {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      itemsQuery = itemsQuery.gte('date_completed', sevenDaysAgo.toISOString());
-    } else if (dateFilter === '30days') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      itemsQuery = itemsQuery.gte('date_completed', thirtyDaysAgo.toISOString());
-    }
-
-    const { data: items, error: itemsError } = await itemsQuery;
-
-    if (itemsError) {
-      return { success: false, error: itemsError.message, data: [] };
-    }
-
-    if (!items || items.length === 0) {
-      return { success: true, data: [] };
-    }
-
-    const projectIds = [...new Set(items.map(item => item.project_id))];
-    
-    const { data: projects } = await adminClient
-      .from('projects')
-      .select('id, name')
-      .in('id', projectIds);
-
-    const projectMap = new Map(projects?.map(p => [p.id, p.name]) || []);
-
-    const groupedItems = items.reduce((acc: any, item: any) => {
-      const projectId = item.project_id;
-      if (!acc[projectId]) {
-        acc[projectId] = {
-          projectId,
-          projectName: projectMap.get(projectId) || 'Unknown Project',
-          items: [],
-        };
-      }
-      acc[projectId].items.push({
-        id: item.id,
-        name: item.name,
-        dateCompleted: item.date_completed,
-        sequence: item.project_item_links?.[0]?.sequence || 0,
-      });
-      return acc;
-    }, {});
-
-    Object.values(groupedItems).forEach((group: any) => {
-      group.items.sort((a: any, b: any) => a.sequence - b.sequence);
-    });
-
-    const result = Object.values(groupedItems).sort((a: any, b: any) => {
-      const aLatest = Math.max(...a.items.map((i: any) => new Date(i.dateCompleted).getTime()));
-      const bLatest = Math.max(...b.items.map((i: any) => new Date(i.dateCompleted).getTime()));
-      return bLatest - aLatest;
-    });
-
-    return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed project items', data: [] };
-  }
-}
-</file>
-
-<file path="lib/actions/dashboard.ts">
-'use server';
-
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { mapMasterListItem } from '@/lib/utils/masterlist';
-
-export async function getDashboardStats(userId: string) {
-  const supabase = await createClient();
-
-  const { data: masterListItems } = await supabase
-    .from('master_list')
-    .select('*')
-    .eq('user_id', userId);
-
-  const itemsToday = masterListItems?.length || 0;
-
-  const { data: activeProjects } = await supabase
-    .from('projects')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'Active');
-
-  const activeProjectsCount = activeProjects?.length || 0;
-
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  const { data: completedItems } = await supabase
-    .from('items')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'Completed')
-    .gte('date_completed', sevenDaysAgo.toISOString());
-
-  const completedThisWeek = completedItems?.length || 0;
-
-  const currentStreak = await calculateStreak(userId);
-
-  return {
-    itemsToday,
-    activeProjects: activeProjectsCount,
-    completedThisWeek,
-    currentStreak,
-  };
-}
-
-export async function getNextItems(userId: string, limit: number) {
-  const adminClient = createAdminClient();
-
-  const { data: masterListEntries } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', userId)
-    .order('position', { ascending: true })
-    .limit(limit);
-
-  if (!masterListEntries || masterListEntries.length === 0) {
-    return [];
-  }
-
-  const mappedItems = await Promise.all(
-    masterListEntries.map(async (entry) => {
-      const { itemName, projectName, projectId } = await mapMasterListItem(entry);
-      return {
-        id: entry.id,
-        position: entry.position,
-        itemName,
-        projectName,
-        projectId,
-        itemId: entry.item_id,
-        projectPlaceholderId: entry.project_placeholder_id,
-      };
-    })
-  );
-
-  return mappedItems;
-}
-
-export async function getActiveProjectsOverview(userId: string) {
-  const supabase = await createClient();
-
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'Active')
-    .order('priority', { ascending: false });
-
-  if (!projects || projects.length === 0) {
-    return [];
-  }
-
-  const projectsWithProgress = await Promise.all(
-    projects.map(async (project) => {
-      const { data: allItems } = await supabase
-        .from('project_item_links')
-        .select(`
-          item_id,
-          items!inner(id, status)
-        `)
-        .eq('project_id', project.id);
-
-      const totalItems = allItems?.length || 0;
-      const completedItems =
-        allItems?.filter((link: any) => link.items?.status === 'Completed').length || 0;
-      const activeItems =
-        allItems?.filter((link: any) => link.items?.status === 'Active').length || 0;
-
-      const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-
-      return {
-        id: project.id,
-        name: project.name,
-        priority: project.priority,
-        totalItems,
-        completedItems,
-        activeItems,
-        progress,
-      };
-    })
-  );
-
-  return projectsWithProgress;
-}
-
-export async function getRecentActivity(userId: string, limit: number) {
-  const supabase = await createClient();
-
-  const { data: completedItems } = await supabase
-    .from('items')
-    .select('id, name, date_completed, project_id, projects(name)')
-    .eq('user_id', userId)
-    .eq('status', 'Completed')
-    .not('date_completed', 'is', null)
-    .order('date_completed', { ascending: false })
-    .limit(limit);
-
-  if (!completedItems || completedItems.length === 0) {
-    return [];
-  }
-
-  return completedItems.map((item) => ({
-    id: item.id,
-    name: item.name,
-    dateCompleted: item.date_completed,
-    projectName: item.project_id && item.projects ? (item.projects as any).name : null,
-  }));
-}
-
-export async function calculateStreak(userId: string) {
-  const supabase = await createClient();
-
-  const { data: completedItems } = await supabase
-    .from('items')
-    .select('date_completed')
-    .eq('user_id', userId)
-    .eq('status', 'Completed')
-    .not('date_completed', 'is', null)
-    .order('date_completed', { ascending: false });
-
-  if (!completedItems || completedItems.length === 0) {
-    return 0;
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dateSet = new Set<string>();
-  completedItems.forEach((item) => {
-    const date = new Date(item.date_completed!);
-    date.setHours(0, 0, 0, 0);
-    dateSet.add(date.toISOString().split('T')[0]);
-  });
-
-  const sortedDates = Array.from(dateSet).sort().reverse();
-
-  let streak = 0;
-  let currentDate = new Date(today);
-
-  for (const dateStr of sortedDates) {
-    const itemDate = new Date(dateStr);
-    const diffDays = Math.floor((currentDate.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0 || diffDays === 1) {
-      streak++;
-      currentDate = new Date(itemDate);
-    } else if (streak > 0) {
-      break;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-</file>
-
-<file path="lib/actions/items.ts">
-'use server';
-
-import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { revalidatePath } from 'next/cache';
-import { reindexMasterList } from '@/lib/utils/masterlist';
-import { reprocessList } from '@/lib/actions/reprocess';
-import { getActiveListId } from '@/lib/utils/list-context';
-import type { Item, ItemType, ItemStatus } from '@/types';
-
-export async function createItem(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  const data = {
-    user_id: user.id,
-    name: formData.get('name') as string,
-    project_id: formData.get('project_id') as string || null,
-    type: (formData.get('type') as ItemType) || 'Errand',
-    status: (formData.get('status') as ItemStatus) || 'Active',
-    scheduled_start_time: formData.get('scheduled_start_time') as string || null,
-    scheduled_end_time: formData.get('scheduled_end_time') as string || null,
-  };
-
-  await supabase.from('items').insert(data);
-
-  revalidatePath('/do-now');
-  revalidatePath('/completed');
-  revalidatePath('/master-list');
-}
-
-export async function updateItem(id: string, formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  const status = formData.get('status') as ItemStatus;
-  const data: Partial<Item> = {
-    name: formData.get('name') as string,
-    project_id: formData.get('project_id') as string || null,
-    type: formData.get('type') as ItemType,
-    status,
-    scheduled_start_time: formData.get('scheduled_start_time') as string || null,
-    scheduled_end_time: formData.get('scheduled_end_time') as string || null,
-  };
-
-  if (status === 'Completed') {
-    data.date_completed = new Date().toISOString();
-  }
-
-  await supabase
-    .from('items')
-    .update(data)
-    .eq('id', id)
-    .eq('user_id', user.id);
-
-  revalidatePath('/do-now');
-  revalidatePath('/completed');
-  revalidatePath('/master-list');
-}
-
-export async function deleteItem(id: string) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  await supabase
-    .from('items')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id);
-
-  revalidatePath('/do-now');
-  revalidatePath('/completed');
-  revalidatePath('/master-list');
-}
-
-export async function getItems(status?: ItemStatus) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { data: [], error: 'Unauthorized' };
-  }
-
-  let query = supabase
-    .from('items')
-    .select('*')
-    .eq('user_id', user.id);
-
-  if (status) {
-    query = query.eq('status', status);
-  }
-
-  const { data, error } = await query.order('date_added', { ascending: false });
-
-  if (error) {
-    return { data: [], error: error.message };
-  }
-
-  return { data: data as Item[], error: null };
-}
-
-export async function getItemsByType(type: ItemType) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { data: [], error: 'Unauthorized' };
-  }
-
-  const { data, error } = await supabase
-    .from('items')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('type', type)
-    .order('date_added', { ascending: false });
-
-  if (error) {
-    return { data: [], error: error.message };
-  }
-
-  return { data: data as Item[], error: null };
-}
-
-export async function createNewItem(name: string, projectId?: string | null) {
-  try {
-    const supabase = await createClient();
-    const adminClient = createAdminClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { success: false, error: 'Unauthorized' };
-    }
-
-    if (!name || name.trim() === '') {
-      return { success: false, error: 'Item name is required' };
-    }
-
-    const listId = await getActiveListId();
-
-    if (!projectId) {
-      const { data: newItem, error: itemError } = await adminClient
-        .from('items')
-        .insert({
-          user_id: user.id,
-          list_id: listId,
-          name: name.trim(),
-          type: 'Errand',
-          status: 'Active',
-          project_id: null,
-        })
-        .select('id')
-        .single();
-
-      if (itemError) {
-        return { success: false, error: `Failed to create item: ${itemError.message}` };
-      }
-
-      const { data: maxPosition } = await adminClient
-        .from('master_list')
-        .select('position')
-        .eq('user_id', user.id)
-        .eq('list_id', listId)
-        .order('position', { ascending: false })
-        .limit(1)
-        .single();
-
-      const nextPosition = (maxPosition?.position || 0) + 1;
-
-      const { error: masterListError } = await adminClient
-        .from('master_list')
-        .insert({
-          user_id: user.id,
-          list_id: listId,
-          position: nextPosition,
-          item_id: newItem.id,
-          project_placeholder_id: null,
-        });
-
-      if (masterListError) {
-        return { success: false, error: `Failed to add to master list: ${masterListError.message}` };
-      }
-
-      await reprocessList(user.id);
-      await reindexMasterList(user.id);
-
-      revalidatePath('/dashboard');
-      revalidatePath('/master-list');
-      revalidatePath('/do-now');
-
-      return { success: true, itemId: newItem.id };
-    } else {
-      const { data: project } = await adminClient
-        .from('projects')
-        .select('id')
-        .eq('id', projectId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (!project) {
-        return { success: false, error: 'Project not found' };
-      }
-
-      const { data: newItem, error: itemError} = await adminClient
-        .from('items')
-        .insert({
-          user_id: user.id,
-          list_id: listId,
-          name: name.trim(),
-          type: 'ProjectItem',
-          status: 'Inactive',
-          project_id: projectId,
-        })
-        .select('id')
-        .single();
-
-      if (itemError) {
-        return { success: false, error: `Failed to create item: ${itemError.message}` };
-      }
-
-      const { data: maxSequence } = await adminClient
-        .from('project_item_links')
-        .select('sequence')
-        .eq('project_id', projectId)
-        .order('sequence', { ascending: false })
-        .limit(1)
-        .single();
-
-      const nextSequence = (maxSequence?.sequence || 0) + 1;
-
-      const { error: linkError } = await adminClient
-        .from('project_item_links')
-        .insert({
-          project_id: projectId,
-          item_id: newItem.id,
-          sequence: nextSequence,
-        });
-
-      if (linkError) {
-        return { success: false, error: `Failed to link item to project: ${linkError.message}` };
-      }
-
-      await reprocessList(user.id);
-
-      revalidatePath('/dashboard');
-      revalidatePath('/projects');
-      revalidatePath(`/projects/${projectId}`);
-      revalidatePath('/master-list');
-      revalidatePath('/do-now');
-
-      return { success: true, itemId: newItem.id };
-    }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
-  }
-}
-
-export async function completeItem(masterListPosition: number = 1) {
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: masterListEntry, error: fetchError } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('position', masterListPosition)
-    .single();
-
-  if (fetchError || !masterListEntry) {
-    throw new Error('Master list entry not found');
-  }
-
-  let itemToComplete: string | null = null;
-
-  if (masterListEntry.item_id) {
-    itemToComplete = masterListEntry.item_id;
-  } else if (masterListEntry.project_placeholder_id) {
-    const parts = masterListEntry.project_placeholder_id.split('-');
-    const projectId = parts.slice(0, -1).join('-');
-
-    const { data: links, error: linksError } = await adminClient
-      .from('project_item_links')
-      .select(`
-        item_id,
-        items (
-          id,
-          status
-        )
-      `)
-      .eq('project_id', projectId)
-      .order('sequence', { ascending: true });
-
-    if (linksError || !links || links.length === 0) {
-      throw new Error('No project items found');
-    }
-
-    for (const link of links) {
-      const item = link.items as any;
-      if (item && item.status === 'Active') {
-        itemToComplete = item.id;
-        break;
-      }
-    }
-
-    if (!itemToComplete) {
-      throw new Error('No active project item found');
-    }
-  } else {
-    throw new Error('Invalid master list entry');
-  }
-
-  const { error: updateError } = await adminClient
-    .from('items')
-    .update({
-      status: 'Completed',
-      date_completed: new Date().toISOString(),
-    })
-    .eq('id', itemToComplete);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  const { error: deleteError } = await adminClient
-    .from('master_list')
-    .delete()
-    .eq('id', masterListEntry.id);
-
-  if (deleteError) {
-    throw new Error(deleteError.message);
-  }
-
-  await reindexMasterList(user.id);
-  await reprocessList(user.id);
-
-  revalidatePath('/master-list');
-  revalidatePath('/do-now');
-  revalidatePath('/completed');
-
-  return { success: true };
-}
-
-export async function takeABite(masterListPosition: number, newText1: string, newText2: string) {
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: masterListEntry, error: fetchError } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('position', masterListPosition)
-    .single();
-
-  if (fetchError || !masterListEntry) {
-    throw new Error('Master list entry not found');
-  }
-
-  if (masterListEntry.item_id) {
-    const { error: updateError } = await adminClient
-      .from('items')
-      .update({ name: newText1 })
-      .eq('id', masterListEntry.item_id);
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    await createNewItem(newText2, null);
-  } else if (masterListEntry.project_placeholder_id) {
-    const parts = masterListEntry.project_placeholder_id.split('-');
-    const projectId = parts.slice(0, -1).join('-');
-    const placeholderIndex = parseInt(parts[parts.length - 1]);
-
-    const { data: activeItems, error: linksError } = await adminClient
-      .from('project_item_links')
-      .select(`
-        item_id,
-        sequence,
-        items (
-          id,
-          status
-        )
-      `)
-      .eq('project_id', projectId)
-      .order('sequence', { ascending: true });
-
-    if (linksError || !activeItems) {
-      throw new Error('Failed to fetch project items');
-    }
-
-    const activeItemsList = activeItems.filter((link: any) => {
-      const item = link.items as any;
-      return item && item.status === 'Active';
-    });
-
-    if (activeItemsList.length === 0) {
-      throw new Error('No active project items found');
-    }
-
-    const currentItem = activeItemsList[placeholderIndex - 1];
-    if (!currentItem) {
-      throw new Error('Current item not found');
-    }
-
-    const currentSequence = currentItem.sequence;
-    const currentItemId = (currentItem.items as any).id;
-
-    const { error: updateError } = await adminClient
-      .from('items')
-      .update({ name: newText1 })
-      .eq('id', currentItemId);
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    const lastActiveItem = activeItemsList[activeItemsList.length - 1];
-    const lastActiveItemId = (lastActiveItem.items as any).id;
-
-    const listId = await getActiveListId();
-
-    const { data: newItem, error: itemError } = await adminClient
-      .from('items')
-      .insert({
-        user_id: user.id,
-        list_id: listId,
-        name: newText2,
-        type: 'ProjectItem',
-        status: 'Active',
-        project_id: projectId,
-      })
-      .select('id')
-      .single();
-
-    if (itemError) {
-      throw new Error(itemError.message);
-    }
-
-    const { data: subsequentLinks, error: subsequentError } = await adminClient
-      .from('project_item_links')
-      .select('id, sequence')
-      .eq('project_id', projectId)
-      .gt('sequence', currentSequence)
-      .order('sequence', { ascending: false });
-
-    if (subsequentError) {
-      throw new Error(subsequentError.message);
-    }
-
-    if (subsequentLinks && subsequentLinks.length > 0) {
-      for (const link of subsequentLinks) {
-        const { error: shiftError } = await adminClient
-          .from('project_item_links')
-          .update({ sequence: link.sequence + 1 })
-          .eq('id', link.id);
-
-        if (shiftError) {
-          throw new Error(shiftError.message);
-        }
-      }
-    }
-
-    const { error: linkError } = await adminClient
-      .from('project_item_links')
-      .insert({
-        project_id: projectId,
-        item_id: newItem.id,
-        sequence: currentSequence + 1,
-      });
-
-    if (linkError) {
-      throw new Error(linkError.message);
-    }
-
-    const { error: deactivateError } = await adminClient
-      .from('items')
-      .update({ status: 'Inactive' })
-      .eq('id', lastActiveItemId);
-
-    if (deactivateError) {
-      throw new Error(deactivateError.message);
-    }
-  } else {
-    throw new Error('Invalid master list entry');
-  }
-
-  revalidatePath('/master-list');
-  revalidatePath('/do-now');
-  revalidatePath('/projects');
-
-  return { success: true };
-}
-
-export async function editItem(masterListPosition: number, newName: string) {
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: masterListEntry, error: fetchError } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('position', masterListPosition)
-    .single();
-
-  if (fetchError || !masterListEntry) {
-    throw new Error('Master list entry not found');
-  }
-
-  let itemToEdit: string | null = null;
-
-  if (masterListEntry.item_id) {
-    itemToEdit = masterListEntry.item_id;
-  } else if (masterListEntry.project_placeholder_id) {
-    const parts = masterListEntry.project_placeholder_id.split('-');
-    const projectId = parts.slice(0, -1).join('-');
-
-    const { data: links, error: linksError } = await adminClient
-      .from('project_item_links')
-      .select(`
-        item_id,
-        items (
-          id,
-          status
-        )
-      `)
-      .eq('project_id', projectId)
-      .order('sequence', { ascending: true });
-
-    if (linksError || !links || links.length === 0) {
-      throw new Error('No project items found');
-    }
-
-    for (const link of links) {
-      const item = link.items as any;
-      if (item && item.status === 'Active') {
-        itemToEdit = item.id;
-        break;
-      }
-    }
-
-    if (!itemToEdit) {
-      throw new Error('No active project item found');
-    }
-  } else {
-    throw new Error('Invalid master list entry');
-  }
-
-  const { error: updateError } = await adminClient
-    .from('items')
-    .update({ name: newName })
-    .eq('id', itemToEdit);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  revalidatePath('/master-list');
-  revalidatePath('/do-now');
-
-  return { success: true };
-}
-
-export async function deleteMasterListItem(masterListPosition: number) {
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: masterListEntry, error: fetchError } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('position', masterListPosition)
-    .single();
-
-  if (fetchError || !masterListEntry) {
-    throw new Error('Master list entry not found');
-  }
-
-  if (masterListEntry.item_id) {
-    await adminClient
-      .from('items')
-      .update({ status: 'Inactive' })
-      .eq('id', masterListEntry.item_id);
-  }
-
-  const { error: deleteError } = await adminClient
-    .from('master_list')
-    .delete()
-    .eq('id', masterListEntry.id);
-
-  if (deleteError) {
-    throw new Error(deleteError.message);
-  }
-
-  await reindexMasterList(user.id);
-  await reprocessList(user.id);
-
-  revalidatePath('/master-list');
-  revalidatePath('/do-now');
-
-  return { success: true };
-}
-
-export async function completeItemAndNextFromProject(masterListPosition: number = 1) {
-  const supabase = await createClient();
-  const adminClient = createAdminClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: masterListEntry, error: fetchError } = await adminClient
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('position', masterListPosition)
-    .single();
-
-  if (fetchError || !masterListEntry) {
-    throw new Error('Master list entry not found');
-  }
-
-  let itemToComplete: string | null = null;
-  let currentProjectId: string | null = null;
-
-  if (masterListEntry.item_id) {
-    itemToComplete = masterListEntry.item_id;
-    
-    const { data: item } = await adminClient
-      .from('items')
-      .select('project_id')
-      .eq('id', itemToComplete)
-      .single();
-    
-    currentProjectId = item?.project_id || null;
-  } else if (masterListEntry.project_placeholder_id) {
-    const parts = masterListEntry.project_placeholder_id.split('-');
-    currentProjectId = parts.slice(0, -1).join('-');
-
-    const { data: links } = await adminClient
-      .from('project_item_links')
-      .select(`
-        item_id,
-        items (
-          id,
-          status
-        )
-      `)
-      .eq('project_id', currentProjectId)
-      .order('sequence', { ascending: true });
-
-    if (!links || links.length === 0) {
-      throw new Error('No project items found');
-    }
-
-    for (const link of links) {
-      const item = link.items as any;
-      if (item && item.status === 'Active') {
-        itemToComplete = item.id;
-        break;
-      }
-    }
-
-    if (!itemToComplete) {
-      throw new Error('No active project item found');
-    }
-  } else {
-    throw new Error('Invalid master list entry');
-  }
-
-  if (!currentProjectId) {
-    await completeItem(masterListPosition);
-    return { success: true, message: 'Item completed (no project association)' };
-  }
-
-  const { error: updateError } = await adminClient
-    .from('items')
-    .update({
-      status: 'Completed',
-      date_completed: new Date().toISOString(),
-    })
-    .eq('id', itemToComplete);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  const { data: allProjectLinks } = await adminClient
-    .from('project_item_links')
-    .select(`
-      item_id,
-      sequence,
-      items (
-        id,
-        status
-      )
-    `)
-    .eq('project_id', currentProjectId)
-    .order('sequence', { ascending: true });
-
-  let nextActiveItemId: string | null = null;
-  if (allProjectLinks) {
-    for (const link of allProjectLinks) {
-      const item = link.items as any;
-      if (item && item.status === 'Active') {
-        nextActiveItemId = item.id;
-        break;
-      }
-    }
-  }
-
-  const { error: deleteError } = await adminClient
-    .from('master_list')
-    .delete()
-    .eq('id', masterListEntry.id);
-
-  if (deleteError) {
-    throw new Error(deleteError.message);
-  }
-
-  await reindexMasterList(user.id);
-
-  if (nextActiveItemId) {
-    const { data: allPlaceholders } = await adminClient
-      .from('master_list')
-      .select('id, position, project_placeholder_id')
-      .eq('user_id', user.id)
-      .not('project_placeholder_id', 'is', null);
-
-    const projectPlaceholders = allPlaceholders?.filter(p => {
-      if (!p.project_placeholder_id) return false;
-      const parts = p.project_placeholder_id.split('-');
-      const pid = parts.slice(0, -1).join('-');
-      return pid === currentProjectId;
-    }) || [];
-
-    for (const placeholder of projectPlaceholders) {
-      const parts = placeholder.project_placeholder_id!.split('-');
-      const index = parseInt(parts[parts.length - 1]);
-      const newIndex = index - 1;
-      
-      if (newIndex > 0) {
-        const newPlaceholderId = `${currentProjectId}-${newIndex}`;
-        await adminClient
-          .from('master_list')
-          .update({ project_placeholder_id: newPlaceholderId })
-          .eq('id', placeholder.id);
-      } else {
-        await adminClient
-          .from('master_list')
-          .delete()
-          .eq('id', placeholder.id);
-      }
-    }
-
-    await reindexMasterList(user.id);
-
-    const { data: allEntries } = await adminClient
-      .from('master_list')
-      .select('id, position')
-      .eq('user_id', user.id)
-      .order('position', { ascending: true });
-
-    if (allEntries) {
-      for (const entry of allEntries) {
-        await adminClient
-          .from('master_list')
-          .update({ position: entry.position + 1 })
-          .eq('id', entry.id);
-      }
-    }
-
-    const newPlaceholderId = `${currentProjectId}-1`;
-    await adminClient
-      .from('master_list')
-      .insert({
-        user_id: user.id,
-        position: 1,
-        item_id: null,
-        project_placeholder_id: newPlaceholderId,
-      });
-
-    await reindexMasterList(user.id);
-  }
-
-  await reprocessList(user.id);
-
-  revalidatePath('/master-list');
-  revalidatePath('/do-now');
-  revalidatePath('/completed');
-  revalidatePath('/projects');
-
-  return { success: true, message: nextActiveItemId ? 'Next item from same project brought forward' : 'No more items in this project' };
 }
 </file>
 
@@ -7291,155 +5692,6 @@ export async function ensureUserHasDefaultList() {
   }
 
   return { success: true, listId: newList.id };
-}
-</file>
-
-<file path="lib/actions/masterlist.ts">
-'use server';
-
-import { createClient } from '@/lib/supabase/server';
-import { revalidatePath } from 'next/cache';
-import { getActiveListId } from '@/lib/utils/list-context';
-import type { MasterList } from '@/types';
-
-export async function getMasterList() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { data: [], error: 'Unauthorized' };
-  }
-
-  const listId = await getActiveListId();
-
-  const { data, error } = await supabase
-    .from('master_list')
-    .select(`
-      *,
-      items (*)
-    `)
-    .eq('user_id', user.id)
-    .eq('list_id', listId)
-    .order('position', { ascending: true });
-
-  if (error) {
-    return { data: [], error: error.message };
-  }
-
-  return { data: data as any[], error: null };
-}
-
-export async function addToMasterList(itemId: string, position: number) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  await supabase.from('master_list').insert({
-    user_id: user.id,
-    item_id: itemId,
-    position,
-  });
-
-  revalidatePath('/master-list');
-}
-
-export async function addProjectPlaceholder(projectPlaceholderId: string, position: number) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  await supabase.from('master_list').insert({
-    user_id: user.id,
-    project_placeholder_id: projectPlaceholderId,
-    position,
-  });
-
-  revalidatePath('/master-list');
-}
-
-export async function removeFromMasterList(id: string) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  await supabase
-    .from('master_list')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id);
-
-  revalidatePath('/master-list');
-}
-
-export async function reorderMasterList(items: { id: string; position: number }[]) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return;
-  }
-
-  for (const item of items) {
-    await supabase
-      .from('master_list')
-      .update({ position: item.position })
-      .eq('id', item.id)
-      .eq('user_id', user.id);
-  }
-
-  revalidatePath('/master-list');
-}
-
-export async function getFirstMasterListEntry() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { data: null, error: 'Unauthorized' };
-  }
-
-  const listId = await getActiveListId();
-
-  const { data: entry, error: fetchError } = await supabase
-    .from('master_list')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('list_id', listId)
-    .eq('position', 1)
-    .single();
-
-  if (fetchError || !entry) {
-    return { data: null, error: fetchError?.message || 'No entries found' };
-  }
-
-  return { data: entry, error: null };
 }
 </file>
 
@@ -8689,70 +6941,6 @@ export function createClient() {
 }
 </file>
 
-<file path="lib/supabase/middleware.ts">
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
-
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  let user = null;
-  
-  try {
-    const { data, error } = await supabase.auth.getUser();
-    if (!error) {
-      user = data.user;
-    }
-  } catch (error) {
-    // Silently handle auth errors - user will be redirected to login
-  }
-
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/auth/login') &&
-    !request.nextUrl.pathname.startsWith('/auth/signup') &&
-    !request.nextUrl.pathname.startsWith('/auth/forgot-password') &&
-    !request.nextUrl.pathname.startsWith('/auth/update-password') &&
-    !request.nextUrl.pathname.startsWith('/auth/callback')
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth/login';
-    return NextResponse.redirect(url);
-  }
-
-  if (user && (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup'))) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
-  }
-
-  return supabaseResponse;
-}
-</file>
-
 <file path="lib/supabase/server.ts">
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
@@ -9247,36 +7435,6 @@ const nextConfig = {}
 module.exports = nextConfig
 </file>
 
-<file path="package.json">
-{
-  "name": "elephant-app",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@supabase/auth-helpers-nextjs": "^0.10.0",
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.45.4",
-    "next": "^16.0.10",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "^15.0.3",
-    "typescript": "^5"
-  }
-}
-</file>
-
 <file path="README.md">
 # Elephant App
 
@@ -9573,6 +7731,1903 @@ For issues and questions, please open an issue on GitHub.
   "exclude": [
     "node_modules"
   ]
+}
+</file>
+
+<file path="components/ProjectDetailClient.tsx">
+'use client';
+
+import { useTransition, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  updateProjectName,
+  updateProjectPriority,
+  updateItemSequence,
+  deleteProjectItem,
+  updateItemName,
+} from '@/lib/actions/projects';
+
+interface ProjectDetailClientProps {
+  projectId: string;
+  project: any;
+  projectItems: any[];
+  editItemId?: string;
+  onAddItem: (formData: FormData) => void;
+}
+
+export default function ProjectDetailClient({
+  projectId,
+  project,
+  projectItems,
+  editItemId,
+  onAddItem,
+}: ProjectDetailClientProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [isAddingItems, startAddTransition] = useTransition();
+  const [optimisticItems, setOptimisticItems] = useState(projectItems);
+  const [itemInputs, setItemInputs] = useState([{ id: 1, value: '' }]);
+  const [bulkText, setBulkText] = useState('');
+
+  const handleUpdateName = async (formData: FormData) => {
+    const name = formData.get('name') as string;
+    if (name) {
+      startTransition(async () => {
+        await updateProjectName(projectId, name);
+        router.refresh();
+      });
+    }
+  };
+
+  const handleUpdatePriority = async (formData: FormData) => {
+    const priority = parseInt(formData.get('priority') as string);
+    startTransition(async () => {
+      await updateProjectPriority(projectId, priority);
+      router.refresh();
+    });
+  };
+
+
+  const handleMoveUp = async (itemId: string, index: number) => {
+    const newItems = [...optimisticItems];
+    [newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]];
+    setOptimisticItems(newItems);
+
+    startTransition(async () => {
+      await updateItemSequence(projectId, itemId, 'up');
+      router.refresh();
+    });
+  };
+
+  const handleMoveDown = async (itemId: string, index: number) => {
+    const newItems = [...optimisticItems];
+    [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
+    setOptimisticItems(newItems);
+
+    startTransition(async () => {
+      await updateItemSequence(projectId, itemId, 'down');
+      router.refresh();
+    });
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    setOptimisticItems(optimisticItems.filter((link: any) => link.items.id !== itemId));
+
+    startTransition(async () => {
+      await deleteProjectItem(itemId);
+      router.refresh();
+    });
+  };
+
+  const handleUpdateItemName = async (itemId: string, formData: FormData) => {
+    const name = formData.get('name') as string;
+    if (name) {
+      startTransition(async () => {
+        await updateItemName(itemId, name);
+        router.push(`/projects/${projectId}`);
+      });
+    }
+  };
+
+  const addItemInput = () => {
+    if (itemInputs.length < 10) {
+      setItemInputs([...itemInputs, { id: Date.now(), value: '' }]);
+    }
+  };
+
+  const removeItemInput = (id: number) => {
+    if (itemInputs.length > 1) {
+      setItemInputs(itemInputs.filter(input => input.id !== id));
+    }
+  };
+
+  const handleInputChange = (id: number, value: string) => {
+    setItemInputs(itemInputs.map(input =>
+      input.id === id ? { ...input, value } : input
+    ));
+  };
+
+  const handleAddItems = async (formData: FormData) => {
+    startAddTransition(async () => {
+      await onAddItem(formData);
+    });
+  };
+
+  const handleBulkPaste = () => {
+    const lines = bulkText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (lines.length === 0) return;
+
+    const newInputs = lines.slice(0, 50).map((line, index) => ({
+      id: Date.now() + index,
+      value: line
+    }));
+
+    setItemInputs(newInputs);
+    setBulkText('');
+  };
+
+  return (
+    <div className="page-container">
+      <div className="page-header">
+        <Link href="/projects">
+          <button type="button" className="btn-back">← Back to Projects</button>
+        </Link>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+          <div>
+            <h1 className="page-title" style={{ margin: 0 }}>Edit Project</h1>
+            <p className="page-subtitle" style={{ margin: 0 }}>{project.name}</p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '0.75rem', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+            <form action={handleUpdateName} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                defaultValue={project.name}
+                required
+                placeholder="Name"
+                disabled={isPending}
+                style={{ padding: '0.4rem 0.6rem', fontSize: '0.9rem', width: '200px' }}
+              />
+              <button type="submit" className="btn-primary" disabled={isPending} style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}>
+                {isPending ? '...' : 'Save'}
+              </button>
+            </form>
+            <div style={{ width: '1px', height: '24px', backgroundColor: '#dee2e6' }}></div>
+            <form action={handleUpdatePriority} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+              <label htmlFor="priority" style={{ fontSize: '0.85rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Priority:</label>
+              <select
+                id="priority"
+                name="priority"
+                defaultValue={project.priority.toString()}
+                disabled={isPending}
+                onChange={(e) => {
+                  const formData = new FormData();
+                  formData.append('priority', e.target.value);
+                  handleUpdatePriority(formData);
+                }}
+                style={{ padding: '0.4rem 0.4rem', fontSize: '0.9rem', width: 'auto' }}
+              >
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </form>
+          </div>
+        </div>
+      </div>
+
+
+
+      <section className="section">
+        <div className="section-header">
+          <h2 className="section-title">Add Items To Project</h2>
+        </div>
+
+        <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+          <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', fontWeight: '600' }}>
+            Bulk Add (Paste from Excel)
+          </h3>
+          <p style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '0.75rem' }}>
+            Paste a list of items (one per line). Works great with copy-paste from Excel or any text editor.
+          </p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder="Paste your list here (one item per line)&#10;Example:&#10;Write script for video&#10;Plan out video scenes&#10;shoot video scene 1"
+            disabled={isAddingItems}
+            style={{
+              width: '100%',
+              minHeight: '120px',
+              padding: '0.75rem',
+              fontSize: '0.95rem',
+              border: '1px solid #ced4da',
+              borderRadius: '6px',
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              marginBottom: '0.75rem'
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleBulkPaste}
+            disabled={isAddingItems || !bulkText.trim()}
+            className="btn-primary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+          >
+            Load Items from List
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#e7f3ff', borderRadius: '6px', border: '1px solid #b3d9ff' }}>
+          <p style={{ fontSize: '0.875rem', margin: 0, color: '#004085' }}>
+            <strong>Or add items individually below:</strong>
+          </p>
+        </div>
+
+        <form id="add-item-form" action={handleAddItems}>
+          {itemInputs.map((input, index) => (
+            <div key={input.id} className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor={`item_name_${input.id}`}>
+                  Item {index + 1} Name
+                </label>
+                <input
+                  id={`item_name_${input.id}`}
+                  name={`name_${index}`}
+                  type="text"
+                  value={input.value}
+                  onChange={(e) => handleInputChange(input.id, e.target.value)}
+                  placeholder="Enter item name"
+                  disabled={isAddingItems}
+                />
+              </div>
+              {itemInputs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeItemInput(input.id)}
+                  className="btn-danger"
+                  style={{ marginBottom: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  disabled={isAddingItems}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="form-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {itemInputs.length < 50 && (
+              <button
+                type="button"
+                onClick={addItemInput}
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                disabled={isAddingItems}
+              >
+                + Add Another Item
+              </button>
+            )}
+            {itemInputs.length > 1 && itemInputs.some(input => input.value.trim() !== '') && (
+              <button
+                type="button"
+                onClick={() => setItemInputs([{ id: Date.now(), value: '' }])}
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                disabled={isAddingItems}
+              >
+                Clear All
+              </button>
+            )}
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', cursor: isAddingItems ? 'wait' : 'pointer' }}
+              disabled={isAddingItems}
+            >
+              {isAddingItems ? 'Adding...' : `Add ${itemInputs.length} Item${itemInputs.length > 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="section">
+        <div className="section-header">
+          <h2 className="section-title">Project Items</h2>
+        </div>
+        {!optimisticItems || optimisticItems.length === 0 ? (
+          <div className="table-empty">
+            <p>No items in this project.</p>
+          </div>
+        ) : (
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item Name</th>
+                  <th>Status</th>
+                  <th className="actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {optimisticItems.map((link: any, index: number) => {
+                  const item = link.items;
+                  const isEditing = editItemId === item.id;
+
+                  return (
+                    <tr key={link.id}>
+                      <td>{index + 1}</td>
+                      <td>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <form action={handleUpdateItemName.bind(null, item.id)} style={{ display: 'flex', gap: '0.5rem', flex: 1, margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+                              <input
+                                name="name"
+                                type="text"
+                                defaultValue={item.name}
+                                required
+                                style={{ flex: 1, minWidth: '200px' }}
+                                disabled={isPending}
+                              />
+                              <button type="submit" className="btn-success" disabled={isPending} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>
+                                {isPending ? 'Saving...' : 'Save'}
+                              </button>
+                            </form>
+                            <Link href={`/projects/${projectId}`}>
+                              <button type="button" className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cancel</button>
+                            </Link>
+                          </div>
+                        ) : (
+                          item.name
+                        )}
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: '0.85rem',
+                          color: item.status === 'Active' ? '#28a745' : item.status === 'Completed' ? '#007bff' : '#6c757d',
+                          fontWeight: 'bold'
+                        }}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="actions-column">
+                        {!isEditing && (
+                          <>
+                            <Link href={`/projects/${projectId}?editItem=${item.id}`}>
+                              <button type="button" className="btn-warning">Edit</button>
+                            </Link>
+                            {index > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveUp(item.id, index)}
+                                className="btn-secondary"
+                                disabled={isPending}
+                              >
+                                ↑
+                              </button>
+                            )}
+                            {index < optimisticItems.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveDown(item.id, index)}
+                                className="btn-secondary"
+                                disabled={isPending}
+                              >
+                                ↓
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(item.id)}
+                              className="btn-danger"
+                              disabled={isPending}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+</file>
+
+<file path="lib/actions/completed.ts">
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+export async function getCompletedErrands(userId: string, dateFilter?: string) {
+  try {
+    const adminClient = createAdminClient();
+
+    let query = adminClient
+      .from('items')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'Completed')
+      .is('project_id', null)
+      .order('date_completed', { ascending: false });
+
+    if (dateFilter === '7days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      query = query.gte('date_completed', sevenDaysAgo.toISOString());
+    } else if (dateFilter === '30days') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      query = query.gte('date_completed', thirtyDaysAgo.toISOString());
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return { success: false, error: error.message, data: [] };
+    }
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed errands', data: [] };
+  }
+}
+
+export async function getCompletedProjects(userId: string) {
+  try {
+    const adminClient = createAdminClient();
+
+    // optimized: fetch project AND count of items in one go
+    // Note: We use 'head: true' logic via count inside select if supported,
+    // or we just fetch the relations. Supabase/PostgREST syntax for count is:
+    // select('*, items(count)')
+    const { data: projects, error: projectsError } = await adminClient
+      .from('projects')
+      .select('*, items(count)')
+      .eq('user_id', userId)
+      .eq('status', 'Completed')
+      .order('created_at', { ascending: false });
+
+    if (projectsError) {
+      return { success: false, error: projectsError.message, data: [] };
+    }
+
+    if (!projects || projects.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Map the result to match your frontend expectation
+    const projectsWithCounts = projects.map((project: any) => ({
+      ...project,
+      // Supabase returns [{ count: 5 }] for relations, or just the number depending on version
+      // The safest way to handle the count response:
+      itemCount: project.items?.[0]?.count || 0,
+    }));
+
+    return { success: true, data: projectsWithCounts };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed projects', data: [] };
+  }
+}
+
+export async function getCompletedProjectItems(userId: string, projectId?: string, dateFilter?: string) {
+  try {
+    const adminClient = createAdminClient();
+
+    // optimized: Fetch items and join with their parent project name immediately
+    let itemsQuery = adminClient
+      .from('items')
+      .select(`
+        *, 
+        project_item_links(sequence),
+        projects(name)
+      `)
+      .eq('user_id', userId)
+      .eq('status', 'Completed')
+      .not('project_id', 'is', null);
+
+    if (projectId) {
+      itemsQuery = itemsQuery.eq('project_id', projectId);
+    }
+
+    if (dateFilter === '7days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      itemsQuery = itemsQuery.gte('date_completed', sevenDaysAgo.toISOString());
+    } else if (dateFilter === '30days') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      itemsQuery = itemsQuery.gte('date_completed', thirtyDaysAgo.toISOString());
+    }
+
+    const { data: items, error: itemsError } = await itemsQuery;
+
+    if (itemsError) {
+      return { success: false, error: itemsError.message, data: [] };
+    }
+
+    if (!items || items.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // The grouping logic remains similar but relies on the data we just fetched
+    const groupedItems = items.reduce((acc: any, item: any) => {
+      const pId = item.project_id;
+      // Access the joined project name directly
+      const pName = item.projects?.name || 'Unknown Project';
+
+      if (!acc[pId]) {
+        acc[pId] = {
+          projectId: pId,
+          projectName: pName,
+          items: [],
+        };
+      }
+      acc[pId].items.push({
+        id: item.id,
+        name: item.name,
+        dateCompleted: item.date_completed,
+        sequence: item.project_item_links?.[0]?.sequence || 0,
+      });
+      return acc;
+    }, {});
+
+    Object.values(groupedItems).forEach((group: any) => {
+      group.items.sort((a: any, b: any) => a.sequence - b.sequence);
+    });
+
+    const result = Object.values(groupedItems).sort((a: any, b: any) => {
+      const aLatest = Math.max(...a.items.map((i: any) => new Date(i.dateCompleted).getTime()));
+      const bLatest = Math.max(...b.items.map((i: any) => new Date(i.dateCompleted).getTime()));
+      return bLatest - aLatest;
+    });
+
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch completed project items', data: [] };
+  }
+}
+</file>
+
+<file path="lib/actions/items.ts">
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { revalidatePath } from 'next/cache';
+import { reindexMasterList } from '@/lib/utils/masterlist';
+import { reprocessList } from '@/lib/actions/reprocess';
+import { getActiveListId } from '@/lib/utils/list-context';
+import type { Item, ItemType, ItemStatus } from '@/types';
+
+export async function createItem(formData: FormData) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  const data = {
+    user_id: user.id,
+    name: formData.get('name') as string,
+    project_id: formData.get('project_id') as string || null,
+    type: (formData.get('type') as ItemType) || 'Errand',
+    status: (formData.get('status') as ItemStatus) || 'Active',
+    scheduled_start_time: formData.get('scheduled_start_time') as string || null,
+    scheduled_end_time: formData.get('scheduled_end_time') as string || null,
+  };
+
+  await supabase.from('items').insert(data);
+
+  revalidatePath('/do-now');
+  revalidatePath('/completed');
+  revalidatePath('/master-list');
+}
+
+export async function updateItem(id: string, formData: FormData) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  const status = formData.get('status') as ItemStatus;
+  const data: Partial<Item> = {
+    name: formData.get('name') as string,
+    project_id: formData.get('project_id') as string || null,
+    type: formData.get('type') as ItemType,
+    status,
+    scheduled_start_time: formData.get('scheduled_start_time') as string || null,
+    scheduled_end_time: formData.get('scheduled_end_time') as string || null,
+  };
+
+  if (status === 'Completed') {
+    data.date_completed = new Date().toISOString();
+  }
+
+  await supabase
+    .from('items')
+    .update(data)
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  revalidatePath('/do-now');
+  revalidatePath('/completed');
+  revalidatePath('/master-list');
+}
+
+export async function deleteItem(id: string) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  await supabase
+    .from('items')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  revalidatePath('/do-now');
+  revalidatePath('/completed');
+  revalidatePath('/master-list');
+}
+
+export async function getItems(status?: ItemStatus) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { data: [], error: 'Unauthorized' };
+  }
+
+  let query = supabase
+    .from('items')
+    .select('*')
+    .eq('user_id', user.id);
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  const { data, error } = await query.order('date_added', { ascending: false });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: data as Item[], error: null };
+}
+
+export async function getItemsByType(type: ItemType) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { data: [], error: 'Unauthorized' };
+  }
+
+  const { data, error } = await supabase
+    .from('items')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('type', type)
+    .order('date_added', { ascending: false });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: data as Item[], error: null };
+}
+
+export async function createNewItem(name: string, projectId?: string | null) {
+  try {
+    const supabase = await createClient();
+    const adminClient = createAdminClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    if (!name || name.trim() === '') {
+      return { success: false, error: 'Item name is required' };
+    }
+
+    const listId = await getActiveListId();
+
+    if (!projectId) {
+      const { data: newItem, error: itemError } = await adminClient
+        .from('items')
+        .insert({
+          user_id: user.id,
+          list_id: listId,
+          name: name.trim(),
+          type: 'Errand',
+          status: 'Active',
+          project_id: null,
+        })
+        .select('id')
+        .single();
+
+      if (itemError) {
+        return { success: false, error: `Failed to create item: ${itemError.message}` };
+      }
+
+      const { data: maxPosition } = await adminClient
+        .from('master_list')
+        .select('position')
+        .eq('user_id', user.id)
+        .eq('list_id', listId)
+        .order('position', { ascending: false })
+        .limit(1)
+        .single();
+
+      const nextPosition = (maxPosition?.position || 0) + 1;
+
+      const { error: masterListError } = await adminClient
+        .from('master_list')
+        .insert({
+          user_id: user.id,
+          list_id: listId,
+          position: nextPosition,
+          item_id: newItem.id,
+          project_placeholder_id: null,
+        });
+
+      if (masterListError) {
+        return { success: false, error: `Failed to add to master list: ${masterListError.message}` };
+      }
+
+      await reprocessList(user.id);
+
+
+      revalidatePath('/dashboard');
+      revalidatePath('/master-list');
+      revalidatePath('/do-now');
+
+      return { success: true, itemId: newItem.id };
+    } else {
+      const { data: project } = await adminClient
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const { data: newItem, error: itemError } = await adminClient
+        .from('items')
+        .insert({
+          user_id: user.id,
+          list_id: listId,
+          name: name.trim(),
+          type: 'ProjectItem',
+          status: 'Inactive',
+          project_id: projectId,
+        })
+        .select('id')
+        .single();
+
+      if (itemError) {
+        return { success: false, error: `Failed to create item: ${itemError.message}` };
+      }
+
+      const { data: maxSequence } = await adminClient
+        .from('project_item_links')
+        .select('sequence')
+        .eq('project_id', projectId)
+        .order('sequence', { ascending: false })
+        .limit(1)
+        .single();
+
+      const nextSequence = (maxSequence?.sequence || 0) + 1;
+
+      const { error: linkError } = await adminClient
+        .from('project_item_links')
+        .insert({
+          project_id: projectId,
+          item_id: newItem.id,
+          sequence: nextSequence,
+        });
+
+      if (linkError) {
+        return { success: false, error: `Failed to link item to project: ${linkError.message}` };
+      }
+
+      await reprocessList(user.id);
+
+      revalidatePath('/dashboard');
+      revalidatePath('/projects');
+      revalidatePath(`/projects/${projectId}`);
+      revalidatePath('/master-list');
+      revalidatePath('/do-now');
+
+      return { success: true, itemId: newItem.id };
+    }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+  }
+}
+
+export async function completeItem(masterListPosition: number = 1) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  let itemToComplete: string | null = null;
+
+  if (masterListEntry.item_id) {
+    itemToComplete = masterListEntry.item_id;
+  } else if (masterListEntry.project_placeholder_id) {
+    const parts = masterListEntry.project_placeholder_id.split('-');
+    const projectId = parts.slice(0, -1).join('-');
+
+    const { data: links, error: linksError } = await adminClient
+      .from('project_item_links')
+      .select(`
+        item_id,
+        items (
+          id,
+          status
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('sequence', { ascending: true });
+
+    if (linksError || !links || links.length === 0) {
+      throw new Error('No project items found');
+    }
+
+    for (const link of links) {
+      const item = link.items as any;
+      if (item && item.status === 'Active') {
+        itemToComplete = item.id;
+        break;
+      }
+    }
+
+    if (!itemToComplete) {
+      throw new Error('No active project item found');
+    }
+  } else {
+    throw new Error('Invalid master list entry');
+  }
+
+  const { error: updateError } = await adminClient
+    .from('items')
+    .update({
+      status: 'Completed',
+      date_completed: new Date().toISOString(),
+    })
+    .eq('id', itemToComplete);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const { error: deleteError } = await adminClient
+    .from('master_list')
+    .delete()
+    .eq('id', masterListEntry.id);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  await reindexMasterList(user.id);
+  await reprocessList(user.id);
+
+  revalidatePath('/master-list');
+  revalidatePath('/do-now');
+  revalidatePath('/completed');
+
+  return { success: true };
+}
+
+export async function takeABite(masterListPosition: number, newText1: string, newText2: string) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  if (masterListEntry.item_id) {
+    const { error: updateError } = await adminClient
+      .from('items')
+      .update({ name: newText1 })
+      .eq('id', masterListEntry.item_id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    await createNewItem(newText2, null);
+  } else if (masterListEntry.project_placeholder_id) {
+    const parts = masterListEntry.project_placeholder_id.split('-');
+    const projectId = parts.slice(0, -1).join('-');
+    const placeholderIndex = parseInt(parts[parts.length - 1]);
+
+    const { data: activeItems, error: linksError } = await adminClient
+      .from('project_item_links')
+      .select(`
+        item_id,
+        sequence,
+        items (
+          id,
+          status
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('sequence', { ascending: true });
+
+    if (linksError || !activeItems) {
+      throw new Error('Failed to fetch project items');
+    }
+
+    const activeItemsList = activeItems.filter((link: any) => {
+      const item = link.items as any;
+      return item && item.status === 'Active';
+    });
+
+    if (activeItemsList.length === 0) {
+      throw new Error('No active project items found');
+    }
+
+    const currentItem = activeItemsList[placeholderIndex - 1];
+    if (!currentItem) {
+      throw new Error('Current item not found');
+    }
+
+    const currentSequence = currentItem.sequence;
+    const currentItemId = (currentItem.items as any).id;
+
+    const { error: updateError } = await adminClient
+      .from('items')
+      .update({ name: newText1 })
+      .eq('id', currentItemId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    const lastActiveItem = activeItemsList[activeItemsList.length - 1];
+    const lastActiveItemId = (lastActiveItem.items as any).id;
+
+    const listId = await getActiveListId();
+
+    const { data: newItem, error: itemError } = await adminClient
+      .from('items')
+      .insert({
+        user_id: user.id,
+        list_id: listId,
+        name: newText2,
+        type: 'ProjectItem',
+        status: 'Active',
+        project_id: projectId,
+      })
+      .select('id')
+      .single();
+
+    if (itemError) {
+      throw new Error(itemError.message);
+    }
+
+    const { data: subsequentLinks, error: subsequentError } = await adminClient
+      .from('project_item_links')
+      .select('id, sequence')
+      .eq('project_id', projectId)
+      .gt('sequence', currentSequence)
+      .order('sequence', { ascending: false });
+
+    if (subsequentError) {
+      throw new Error(subsequentError.message);
+    }
+
+    if (subsequentLinks && subsequentLinks.length > 0) {
+      for (const link of subsequentLinks) {
+        const { error: shiftError } = await adminClient
+          .from('project_item_links')
+          .update({ sequence: link.sequence + 1 })
+          .eq('id', link.id);
+
+        if (shiftError) {
+          throw new Error(shiftError.message);
+        }
+      }
+    }
+
+    const { error: linkError } = await adminClient
+      .from('project_item_links')
+      .insert({
+        project_id: projectId,
+        item_id: newItem.id,
+        sequence: currentSequence + 1,
+      });
+
+    if (linkError) {
+      throw new Error(linkError.message);
+    }
+
+    const { error: deactivateError } = await adminClient
+      .from('items')
+      .update({ status: 'Inactive' })
+      .eq('id', lastActiveItemId);
+
+    if (deactivateError) {
+      throw new Error(deactivateError.message);
+    }
+  } else {
+    throw new Error('Invalid master list entry');
+  }
+
+  revalidatePath('/master-list');
+  revalidatePath('/do-now');
+  revalidatePath('/projects');
+
+  return { success: true };
+}
+
+export async function editItem(masterListPosition: number, newName: string) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  let itemToEdit: string | null = null;
+
+  if (masterListEntry.item_id) {
+    itemToEdit = masterListEntry.item_id;
+  } else if (masterListEntry.project_placeholder_id) {
+    const parts = masterListEntry.project_placeholder_id.split('-');
+    const projectId = parts.slice(0, -1).join('-');
+
+    const { data: links, error: linksError } = await adminClient
+      .from('project_item_links')
+      .select(`
+        item_id,
+        items (
+          id,
+          status
+        )
+      `)
+      .eq('project_id', projectId)
+      .order('sequence', { ascending: true });
+
+    if (linksError || !links || links.length === 0) {
+      throw new Error('No project items found');
+    }
+
+    for (const link of links) {
+      const item = link.items as any;
+      if (item && item.status === 'Active') {
+        itemToEdit = item.id;
+        break;
+      }
+    }
+
+    if (!itemToEdit) {
+      throw new Error('No active project item found');
+    }
+  } else {
+    throw new Error('Invalid master list entry');
+  }
+
+  const { error: updateError } = await adminClient
+    .from('items')
+    .update({ name: newName })
+    .eq('id', itemToEdit);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  revalidatePath('/master-list');
+  revalidatePath('/do-now');
+
+  return { success: true };
+}
+
+export async function deleteMasterListItem(masterListPosition: number) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  if (masterListEntry.item_id) {
+    await adminClient
+      .from('items')
+      .update({ status: 'Inactive' })
+      .eq('id', masterListEntry.item_id);
+  }
+
+  const { error: deleteError } = await adminClient
+    .from('master_list')
+    .delete()
+    .eq('id', masterListEntry.id);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  await reindexMasterList(user.id);
+  await reprocessList(user.id);
+
+  revalidatePath('/master-list');
+  revalidatePath('/do-now');
+
+  return { success: true };
+}
+
+export async function completeItemAndNextFromProject(masterListPosition: number = 1) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  let itemToComplete: string | null = null;
+  let currentProjectId: string | null = null;
+
+  if (masterListEntry.item_id) {
+    itemToComplete = masterListEntry.item_id;
+
+    const { data: item } = await adminClient
+      .from('items')
+      .select('project_id')
+      .eq('id', itemToComplete)
+      .single();
+
+    currentProjectId = item?.project_id || null;
+  } else if (masterListEntry.project_placeholder_id) {
+    const parts = masterListEntry.project_placeholder_id.split('-');
+    currentProjectId = parts.slice(0, -1).join('-');
+
+    const { data: links } = await adminClient
+      .from('project_item_links')
+      .select(`
+        item_id,
+        items (
+          id,
+          status
+        )
+      `)
+      .eq('project_id', currentProjectId)
+      .order('sequence', { ascending: true });
+
+    if (!links || links.length === 0) {
+      throw new Error('No project items found');
+    }
+
+    for (const link of links) {
+      const item = link.items as any;
+      if (item && item.status === 'Active') {
+        itemToComplete = item.id;
+        break;
+      }
+    }
+
+    if (!itemToComplete) {
+      throw new Error('No active project item found');
+    }
+  } else {
+    throw new Error('Invalid master list entry');
+  }
+
+  if (!currentProjectId) {
+    await completeItem(masterListPosition);
+    return { success: true, message: 'Item completed (no project association)' };
+  }
+
+  const { error: updateError } = await adminClient
+    .from('items')
+    .update({
+      status: 'Completed',
+      date_completed: new Date().toISOString(),
+    })
+    .eq('id', itemToComplete);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const { data: allProjectLinks } = await adminClient
+    .from('project_item_links')
+    .select(`
+      item_id,
+      sequence,
+      items (
+        id,
+        status
+      )
+    `)
+    .eq('project_id', currentProjectId)
+    .order('sequence', { ascending: true });
+
+  let nextActiveItemId: string | null = null;
+  if (allProjectLinks) {
+    for (const link of allProjectLinks) {
+      const item = link.items as any;
+      if (item && item.status === 'Active') {
+        nextActiveItemId = item.id;
+        break;
+      }
+    }
+  }
+
+  const { error: deleteError } = await adminClient
+    .from('master_list')
+    .delete()
+    .eq('id', masterListEntry.id);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  await reindexMasterList(user.id);
+
+  if (nextActiveItemId) {
+    const { data: allPlaceholders } = await adminClient
+      .from('master_list')
+      .select('id, position, project_placeholder_id')
+      .eq('user_id', user.id)
+      .not('project_placeholder_id', 'is', null);
+
+    const projectPlaceholders = allPlaceholders?.filter(p => {
+      if (!p.project_placeholder_id) return false;
+      const parts = p.project_placeholder_id.split('-');
+      const pid = parts.slice(0, -1).join('-');
+      return pid === currentProjectId;
+    }) || [];
+
+    for (const placeholder of projectPlaceholders) {
+      const parts = placeholder.project_placeholder_id!.split('-');
+      const index = parseInt(parts[parts.length - 1]);
+      const newIndex = index - 1;
+
+      if (newIndex > 0) {
+        const newPlaceholderId = `${currentProjectId}-${newIndex}`;
+        await adminClient
+          .from('master_list')
+          .update({ project_placeholder_id: newPlaceholderId })
+          .eq('id', placeholder.id);
+      } else {
+        await adminClient
+          .from('master_list')
+          .delete()
+          .eq('id', placeholder.id);
+      }
+    }
+
+    await reindexMasterList(user.id);
+
+    const { data: allEntries } = await adminClient
+      .from('master_list')
+      .select('id, position')
+      .eq('user_id', user.id)
+      .order('position', { ascending: true });
+
+    if (allEntries) {
+      for (const entry of allEntries) {
+        await adminClient
+          .from('master_list')
+          .update({ position: entry.position + 1 })
+          .eq('id', entry.id);
+      }
+    }
+
+    const newPlaceholderId = `${currentProjectId}-1`;
+    await adminClient
+      .from('master_list')
+      .insert({
+        user_id: user.id,
+        position: 1,
+        item_id: null,
+        project_placeholder_id: newPlaceholderId,
+      });
+
+    await reindexMasterList(user.id);
+  }
+
+  await reprocessList(user.id);
+
+  revalidatePath('/master-list');
+  revalidatePath('/do-now');
+  revalidatePath('/completed');
+  revalidatePath('/projects');
+
+  return { success: true, message: nextActiveItemId ? 'Next item from same project brought forward' : 'No more items in this project' };
+}
+</file>
+
+<file path="lib/actions/masterlist.ts">
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
+import { getActiveListId } from '@/lib/utils/list-context';
+import type { MasterList } from '@/types';
+
+export async function getMasterList() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { data: [], error: 'Unauthorized' };
+  }
+
+  const listId = await getActiveListId();
+
+  const { data, error } = await supabase
+    .from('master_list')
+    .select(`
+      *,
+      items (*)
+    `)
+    .eq('user_id', user.id)
+    .eq('list_id', listId)
+    .order('position', { ascending: true });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: data as any[], error: null };
+}
+
+export async function addToMasterList(itemId: string, position: number) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  await supabase.from('master_list').insert({
+    user_id: user.id,
+    item_id: itemId,
+    position,
+  });
+
+  revalidatePath('/master-list');
+}
+
+export async function addProjectPlaceholder(projectPlaceholderId: string, position: number) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  await supabase.from('master_list').insert({
+    user_id: user.id,
+    project_placeholder_id: projectPlaceholderId,
+    position,
+  });
+
+  revalidatePath('/master-list');
+}
+
+export async function removeFromMasterList(id: string) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  await supabase
+    .from('master_list')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  revalidatePath('/master-list');
+}
+
+export async function reorderMasterList(items: { id: string; position: number }[]) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  for (const item of items) {
+    await supabase
+      .from('master_list')
+      .update({ position: item.position })
+      .eq('id', item.id)
+      .eq('user_id', user.id);
+  }
+
+  revalidatePath('/master-list');
+}
+
+export async function getFirstMasterListEntry() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { data: null, error: 'Unauthorized' };
+  }
+
+  const listId = await getActiveListId();
+
+  const { data: entry, error: fetchError } = await supabase
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('list_id', listId)
+    .order('position', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError || !entry) {
+    return { data: null, error: fetchError?.message || 'No entries found' };
+  }
+
+  return { data: entry, error: null };
+}
+</file>
+
+<file path="lib/supabase/middleware.ts">
+import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
+
+export async function updateSession(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({
+    request,
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  let user = null;
+
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (!error) {
+      user = data.user;
+    }
+  } catch (error) {
+    // Silently handle auth errors - user will be redirected to login
+  }
+
+  if (
+    !user &&
+    !request.nextUrl.pathname.startsWith('/auth/login') &&
+    !request.nextUrl.pathname.startsWith('/auth/signup') &&
+    !request.nextUrl.pathname.startsWith('/auth/forgot-password') &&
+    !request.nextUrl.pathname.startsWith('/auth/update-password') &&
+    !request.nextUrl.pathname.startsWith('/auth/callback')
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/auth/login';
+    return NextResponse.redirect(url);
+  }
+
+  // If user is logged in and on the homepage or auth pages, redirect to dashboard
+  if (user) {
+    if (request.nextUrl.pathname === '/' ||
+      request.nextUrl.pathname.startsWith('/auth/login') ||
+      request.nextUrl.pathname.startsWith('/auth/signup')) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  return supabaseResponse;
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "elephant-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "next": "^16.0.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "baseline-browser-mapping": "^2.9.19",
+    "eslint": "^8",
+    "eslint-config-next": "^15.0.3",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="lib/actions/dashboard.ts">
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { mapMasterListItem } from '@/lib/utils/masterlist';
+
+export async function getDashboardStats(userId: string) {
+  const supabase = await createClient();
+
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
+  const { data: masterListItems } = await supabase
+    .from('master_list')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('list_id', listId);
+
+  const itemsToday = masterListItems?.length || 0;
+
+  const { data: activeProjects } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('list_id', listId)
+    .eq('status', 'Active');
+
+  const activeProjectsCount = activeProjects?.length || 0;
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const { data: completedItems } = await supabase
+    .from('items')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'Completed')
+    .gte('date_completed', sevenDaysAgo.toISOString());
+
+  const completedThisWeek = completedItems?.length || 0;
+
+  const currentStreak = await calculateStreak(userId);
+
+  return {
+    itemsToday,
+    activeProjects: activeProjectsCount,
+    completedThisWeek,
+    currentStreak,
+  };
+}
+
+export async function getNextItems(userId: string, limit: number) {
+  const adminClient = createAdminClient();
+
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
+  const { data: masterListEntries } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('list_id', listId)
+    .order('position', { ascending: true })
+    .limit(limit);
+
+  if (!masterListEntries || masterListEntries.length === 0) {
+    return [];
+  }
+
+  const mappedItems = await Promise.all(
+    masterListEntries.map(async (entry) => {
+      const { itemName, projectName, projectId } = await mapMasterListItem(entry);
+      return {
+        id: entry.id,
+        position: entry.position,
+        itemName,
+        projectName,
+        projectId,
+        itemId: entry.item_id,
+        projectPlaceholderId: entry.project_placeholder_id,
+      };
+    })
+  );
+
+  return mappedItems;
+}
+
+export async function getActiveProjectsOverview(userId: string) {
+  const supabase = await createClient();
+
+  const { getActiveListId } = await import('@/lib/utils/list-context');
+  const listId = await getActiveListId();
+
+  // optimized: Fetch projects and ALL their linked items/statuses in one single query
+  const { data: projects } = await supabase
+    .from('projects')
+    .select(`
+      *,
+      project_item_links (
+        items (
+          status
+        )
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('list_id', listId)
+    .eq('status', 'Active')
+    .order('priority', { ascending: false });
+
+  if (!projects || projects.length === 0) {
+    return [];
+  }
+
+  // Calculate stats in memory (much faster than DB roundtrips)
+  const projectsWithProgress = projects.map((project: any) => {
+    // Flatten the structure: project -> links -> items
+    const allLinks = project.project_item_links || [];
+
+    const totalItems = allLinks.length;
+    let completedItems = 0;
+    let activeItems = 0;
+
+    allLinks.forEach((link: any) => {
+      const status = link.items?.status;
+      if (status === 'Completed') completedItems++;
+      if (status === 'Active') activeItems++;
+    });
+
+    const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+    return {
+      id: project.id,
+      name: project.name,
+      priority: project.priority,
+      totalItems,
+      completedItems,
+      activeItems,
+      progress,
+    };
+  });
+
+  return projectsWithProgress;
+}
+
+export async function getRecentActivity(userId: string, limit: number) {
+  const supabase = await createClient();
+
+  const { data: completedItems } = await supabase
+    .from('items')
+    .select('id, name, date_completed, project_id, projects(name)')
+    .eq('user_id', userId)
+    .eq('status', 'Completed')
+    .not('date_completed', 'is', null)
+    .order('date_completed', { ascending: false })
+    .limit(limit);
+
+  if (!completedItems || completedItems.length === 0) {
+    return [];
+  }
+
+  return completedItems.map((item) => ({
+    id: item.id,
+    name: item.name,
+    dateCompleted: item.date_completed,
+    projectName: item.project_id && item.projects ? (item.projects as any).name : null,
+  }));
+}
+
+export async function calculateStreak(userId: string) {
+  const supabase = await createClient();
+
+  const { data: completedItems } = await supabase
+    .from('items')
+    .select('date_completed')
+    .eq('user_id', userId)
+    .eq('status', 'Completed')
+    .not('date_completed', 'is', null)
+    .order('date_completed', { ascending: false });
+
+  if (!completedItems || completedItems.length === 0) {
+    return 0;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dateSet = new Set<string>();
+  completedItems.forEach((item) => {
+    const date = new Date(item.date_completed!);
+    date.setHours(0, 0, 0, 0);
+    dateSet.add(date.toISOString().split('T')[0]);
+  });
+
+  const sortedDates = Array.from(dateSet).sort().reverse();
+
+  let streak = 0;
+  let currentDate = new Date(today);
+
+  for (const dateStr of sortedDates) {
+    const itemDate = new Date(dateStr);
+    const diffDays = Math.floor((currentDate.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0 || diffDays === 1) {
+      streak++;
+      currentDate = new Date(itemDate);
+    } else if (streak > 0) {
+      break;
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }
 </file>
 

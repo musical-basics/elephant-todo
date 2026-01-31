@@ -29,9 +29,31 @@ export async function reprocessList(userId: string): Promise<void> {
 
     const tnml = await getTNML(userId);
 
+    // FIX START: Bootstrap the list if it is empty
     if (tnml === 0) {
-      break;
+      // Sort projects by priority (descending) so the most important project goes first
+      const sortedProjects = [...projects].sort((a, b) => b.priority - a.priority);
+
+      let bootstrapped = false;
+      for (const project of sortedProjects) {
+        // Try to activate the next item from this project
+        const itemActivated = await activateNextProjectItem(userId, project.id, 0);
+        if (itemActivated) {
+          itemsAdded = true;
+          bootstrapped = true;
+          break; // We added one, break to restart the main loop with tnml = 1
+        }
+      }
+
+      if (!bootstrapped) {
+        // If we couldn't add items from ANY project, break the loop
+        break;
+      } else {
+        // If we added an item, continue to the next iteration of the while loop
+        continue;
+      }
     }
+    // FIX END
 
     const { data: firstEntry } = await adminClient
       .from('master_list')
@@ -143,7 +165,7 @@ async function activateNextProjectItem(
           const parts = p.project_placeholder_id.split('-');
           const extractedProjectId = parts.slice(0, -1).join('-');
           const index = parseInt(parts[parts.length - 1]);
-          
+
           if (extractedProjectId === projectId && !isNaN(index) && index >= nextIndex) {
             nextIndex = index + 1;
           }
