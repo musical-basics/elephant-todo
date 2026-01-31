@@ -5,6 +5,7 @@ import { getMasterList } from '@/lib/actions/masterlist';
 import { mapMasterListItem } from '@/lib/utils/masterlist';
 import { completeItem, editItem, deleteMasterListItem } from '@/lib/actions/items';
 import { reprocessList } from '@/lib/actions/reprocess';
+import { getActiveListId } from '@/lib/utils/list-context'; // Added import
 import ManualReprocessButton from '@/app/components/ManualReprocessButton';
 
 async function handleComplete(position: number) {
@@ -31,21 +32,27 @@ async function handleDelete(position: number) {
 async function handleReprocess() {
   'use server';
   const supabase = await createClient();
-  const adminClient = createAdminClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  
+
   if (user) {
-    await deactivateOrphanedActiveItems(user.id);
-    await restoreOrphanedActiveItems(user.id);
-    await cleanupInvalidPlaceholders(user.id);
-    await reprocessList(user.id);
+    // We must get the listId here to pass context to the cleanup functions
+    const listId = await getActiveListId();
+
+    try {
+      await deactivateOrphanedActiveItems(user.id, listId);
+      await restoreOrphanedActiveItems(user.id, listId);
+      await cleanupInvalidPlaceholders(user.id, listId);
+      await reprocessList(user.id);
+    } catch (error) {
+      console.error("Reprocess failed:", error);
+    }
   }
   redirect('/master-list');
 }
 
-async function deactivateOrphanedActiveItems(userId: string) {
+async function deactivateOrphanedActiveItems(userId: string, listId: string) {
   'use server';
   const adminClient = createAdminClient();
 
@@ -53,6 +60,7 @@ async function deactivateOrphanedActiveItems(userId: string) {
     .from('projects')
     .select('id')
     .eq('user_id', userId)
+    .eq('list_id', listId) // Filter by listId
     .eq('status', 'Active');
 
   if (!projects || projects.length === 0) return;
@@ -64,6 +72,7 @@ async function deactivateOrphanedActiveItems(userId: string) {
       .from('master_list')
       .select('project_placeholder_id')
       .eq('user_id', userId)
+      .eq('list_id', listId) // Filter by listId
       .not('project_placeholder_id', 'is', null);
 
     let placeholderCount = 0;
@@ -108,18 +117,21 @@ async function deactivateOrphanedActiveItems(userId: string) {
   }
 }
 
-async function restoreOrphanedActiveItems(userId: string) {
+async function restoreOrphanedActiveItems(userId: string, listId: string) {
   'use server';
   const adminClient = createAdminClient();
 
+  // Get active items belonging to the current list's projects
   const { data: activeProjectItems } = await adminClient
     .from('project_item_links')
     .select(`
       item_id,
       project_id,
-      items!inner(id, status)
+      items!inner(id, status),
+      projects!inner(list_id)
     `)
-    .eq('items.status', 'Active');
+    .eq('items.status', 'Active')
+    .eq('projects.list_id', listId); // Ensure we only look at items in this list
 
   if (!activeProjectItems || activeProjectItems.length === 0) return;
 
@@ -131,6 +143,7 @@ async function restoreOrphanedActiveItems(userId: string) {
       .from('master_list')
       .select('id, project_placeholder_id')
       .eq('user_id', userId)
+      .eq('list_id', listId) // Filter by listId
       .not('project_placeholder_id', 'is', null);
 
     let existingEntry = null;
@@ -153,12 +166,13 @@ async function restoreOrphanedActiveItems(userId: string) {
       }
     }
 
+    // CRITICAL FIX: The previous code was failing to insert because it was missing list_id
     if (!existingEntry) {
-
       const { data: maxPosition } = await adminClient
         .from('master_list')
         .select('position')
         .eq('user_id', userId)
+        .eq('list_id', listId) // Filter by listId
         .order('position', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -169,6 +183,7 @@ async function restoreOrphanedActiveItems(userId: string) {
         .from('master_list')
         .insert({
           user_id: userId,
+          list_id: listId, // <-- Added Missing Field
           position: nextPosition,
           item_id: null,
           project_placeholder_id: `${projectId}-${nextIndex}`
@@ -177,24 +192,25 @@ async function restoreOrphanedActiveItems(userId: string) {
   }
 }
 
-async function cleanupInvalidPlaceholders(userId: string) {
+async function cleanupInvalidPlaceholders(userId: string, listId: string) {
   'use server';
   const supabase = await createClient();
-  
+
   const { data: masterList } = await supabase
     .from('master_list')
     .select('*')
     .eq('user_id', userId)
+    .eq('list_id', listId) // Filter by listId
     .not('project_placeholder_id', 'is', null);
-  
+
   if (!masterList) return;
-  
+
   for (const entry of masterList) {
     if (entry.project_placeholder_id) {
       const parts = entry.project_placeholder_id.split('-');
       const projectId = parts.slice(0, -1).join('-');
       const placeholderIndex = parseInt(parts[parts.length - 1]);
-      
+
       const { data: activeItems } = await supabase
         .from('project_item_links')
         .select(`
@@ -204,7 +220,7 @@ async function cleanupInvalidPlaceholders(userId: string) {
         .eq('project_id', projectId)
         .eq('items.status', 'Active')
         .order('sequence', { ascending: true });
-      
+
       if (!activeItems || activeItems.length < placeholderIndex) {
         await supabase
           .from('master_list')
@@ -213,13 +229,15 @@ async function cleanupInvalidPlaceholders(userId: string) {
       }
     }
   }
-  
+
+  // Re-index only this list
   const { data: entries } = await supabase
     .from('master_list')
     .select('id')
     .eq('user_id', userId)
+    .eq('list_id', listId)
     .order('position', { ascending: true });
-  
+
   if (entries) {
     for (let i = 0; i < entries.length; i++) {
       await supabase
@@ -248,7 +266,7 @@ async function handleExport() {
     .order('position', { ascending: true });
 
   const exportData = JSON.stringify(masterList, null, 2);
-  
+
   redirect('/master-list');
 }
 
@@ -308,66 +326,66 @@ export default async function MasterListPage({
                 </tr>
               </thead>
               <tbody>
-              {validItems.map((entry: any) => {
-                const isEditing = query.edit === entry.position.toString();
+                {validItems.map((entry: any) => {
+                  const isEditing = query.edit === entry.position.toString();
 
-                return (
-                  <tr key={entry.id}>
-                    <td>{entry.position}</td>
-                    <td>
-                      {isEditing ? (
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <form style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
-                            <input
-                              name="name"
-                              type="text"
-                              defaultValue={entry.itemName}
-                              required
-                              style={{ flex: 1, minWidth: '200px' }}
-                            />
-                            <button type="submit" formAction={handleEdit.bind(null, entry.position)} className="btn-success" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>
-                              Save
-                            </button>
-                          </form>
-                          <a href="/master-list">
-                            <button type="button" className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cancel</button>
+                  return (
+                    <tr key={entry.id}>
+                      <td>{entry.position}</td>
+                      <td>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <form style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: 0, padding: 0, boxShadow: 'none', background: 'transparent' }}>
+                              <input
+                                name="name"
+                                type="text"
+                                defaultValue={entry.itemName}
+                                required
+                                style={{ flex: 1, minWidth: '200px' }}
+                              />
+                              <button type="submit" formAction={handleEdit.bind(null, entry.position)} className="btn-success" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>
+                                Save
+                              </button>
+                            </form>
+                            <a href="/master-list">
+                              <button type="button" className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem' }}>Cancel</button>
+                            </a>
+                          </div>
+                        ) : (
+                          entry.itemName
+                        )}
+                      </td>
+                      <td>
+                        {entry.projectName && entry.projectId ? (
+                          <a href={`/projects/${entry.projectId}`} style={{ color: 'inherit', textDecoration: 'underline' }}>
+                            {entry.projectName}
                           </a>
-                        </div>
-                      ) : (
-                        entry.itemName
-                      )}
-                    </td>
-                    <td>
-                      {entry.projectName && entry.projectId ? (
-                        <a href={`/projects/${entry.projectId}`} style={{ color: 'inherit', textDecoration: 'underline' }}>
-                          {entry.projectName}
-                        </a>
-                      ) : (
-                        entry.projectName || '-'
-                      )}
-                    </td>
-                    <td className="actions-column">
-                      {!isEditing && (
-                        <>
-                          <form>
-                            <button type="submit" formAction={handleComplete.bind(null, entry.position)} className="btn-success">
-                              Complete
-                            </button>
-                          </form>
-                          <a href={`/master-list?edit=${entry.position}`}>
-                            <button type="button" className="btn-warning">Edit</button>
-                          </a>
-                          <form>
-                            <button type="submit" formAction={handleDelete.bind(null, entry.position)} className="btn-danger">
-                              Delete
-                            </button>
-                          </form>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-              );
-            })}
+                        ) : (
+                          entry.projectName || '-'
+                        )}
+                      </td>
+                      <td className="actions-column">
+                        {!isEditing && (
+                          <>
+                            <form>
+                              <button type="submit" formAction={handleComplete.bind(null, entry.position)} className="btn-success">
+                                Complete
+                              </button>
+                            </form>
+                            <a href={`/master-list?edit=${entry.position}`}>
+                              <button type="button" className="btn-warning">Edit</button>
+                            </a>
+                            <form>
+                              <button type="submit" formAction={handleDelete.bind(null, entry.position)} className="btn-danger">
+                                Delete
+                              </button>
+                            </form>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
