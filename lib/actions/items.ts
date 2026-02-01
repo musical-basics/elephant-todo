@@ -8,6 +8,93 @@ import { reprocessList } from '@/lib/actions/reprocess';
 import { getActiveListId } from '@/lib/utils/list-context';
 import type { Item, ItemType, ItemStatus } from '@/types';
 
+// Add this new function
+export async function splitAndKick(masterListPosition: number, newText1: string, newText2: string) {
+  const supabase = await createClient();
+  const adminClient = createAdminClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  // 1. Get the current Master List entry
+  const { data: masterListEntry, error: fetchError } = await adminClient
+    .from('master_list')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('position', masterListPosition)
+    .single();
+
+  if (fetchError || !masterListEntry) {
+    throw new Error('Master list entry not found');
+  }
+
+  // 2. Handle Logic based on Item Type
+  if (masterListEntry.item_id) {
+    // Case A: It is an Errand (no project)
+    // Update the current errand's name
+    const { error: updateError } = await adminClient
+      .from('items')
+      .update({ name: newText1 })
+      .eq('id', masterListEntry.item_id);
+
+    if (updateError) throw new Error(updateError.message);
+
+    // Create the new errand (default behavior is adding to end of Master List)
+    await createNewItem(newText2, null);
+
+  } else if (masterListEntry.project_placeholder_id) {
+    // Case B: It is a Project Item
+    const parts = masterListEntry.project_placeholder_id.split('-');
+    const projectId = parts.slice(0, -1).join('-');
+    const placeholderIndex = parseInt(parts[parts.length - 1]);
+
+    // Find the actual Active item ID currently at this placeholder position
+    const { data: activeItems, error: linksError } = await adminClient
+      .from('project_item_links')
+      .select(`
+        item_id,
+        items!inner(id, status)
+      `)
+      .eq('project_id', projectId)
+      .eq('items.status', 'Active')
+      .order('sequence', { ascending: true });
+
+    if (linksError || !activeItems || activeItems.length < placeholderIndex) {
+      throw new Error('Active project item not found for this placeholder');
+    }
+
+    // The item currently occupying this slot
+    const currentItem = activeItems[placeholderIndex - 1];
+    const currentItemId = currentItem.item_id;
+
+    // Update the current item's name
+    const { error: updateError } = await adminClient
+      .from('items')
+      .update({ name: newText1 })
+      .eq('id', currentItemId);
+
+    if (updateError) throw new Error(updateError.message);
+
+    // "Kick": Add the new item to the end of the project as Inactive
+    // createNewItem(name, projectId) handles exactly this logic:
+    // It sets status='Inactive', finds max sequence, and appends.
+    await createNewItem(newText2, projectId);
+  } else {
+    throw new Error('Invalid master list entry');
+  }
+
+  revalidatePath('/do-now');
+  revalidatePath('/master-list');
+  revalidatePath('/projects');
+
+  return { success: true };
+}
+
 export async function createItem(formData: FormData) {
   const supabase = await createClient();
 

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getFirstMasterListEntry } from '@/lib/actions/masterlist';
 import { mapMasterListItem } from '@/lib/utils/masterlist';
-import { completeItem, takeABite, createNewItem, completeItemAndNextFromProject } from '@/lib/actions/items';
+import { completeItem, takeABite, splitAndKick, createNewItem, completeItemAndNextFromProject } from '@/lib/actions/items';
 import { getProjects, createNewProject } from '@/lib/actions/projects';
 import AddItemForm from '@/components/AddItemForm';
 
@@ -22,29 +22,41 @@ async function handleTakeABite(formData: FormData) {
   'use server';
   const text1 = formData.get('text1') as string;
   const text2 = formData.get('text2') as string;
-  
+
   if (text1 && text2) {
     await takeABite(1, text1, text2);
   }
-  
+
+  redirect('/do-now');
+}
+
+async function handleSplitAndKick(formData: FormData) {
+  'use server';
+  const text1 = formData.get('text1') as string;
+  const text2 = formData.get('text2') as string;
+
+  if (text1 && text2) {
+    await splitAndKick(1, text1, text2);
+  }
+
   redirect('/do-now');
 }
 
 async function handleAddItem(formData: FormData) {
   'use server';
-  
+
   const name = formData.get('name') as string;
   const projectSelect = formData.get('project_select') as string;
   const newProjectName = formData.get('new_project_name') as string;
   const newProjectPriority = formData.get('new_project_priority') as string;
-  
+
   if (!name) {
     redirect('/do-now');
     return;
   }
-  
+
   let projectId: string | null = null;
-  
+
   if (projectSelect === 'new' && newProjectName) {
     const priority = parseInt(newProjectPriority) || 3;
     const result = await createNewProject(newProjectName, priority);
@@ -52,7 +64,7 @@ async function handleAddItem(formData: FormData) {
   } else if (projectSelect && projectSelect !== 'new') {
     projectId = projectSelect;
   }
-  
+
   await createNewItem(name, projectId);
   redirect('/do-now');
 }
@@ -60,7 +72,7 @@ async function handleAddItem(formData: FormData) {
 export default async function DoNowPage({
   searchParams,
 }: {
-  searchParams: Promise<{ showBite?: string }>;
+  searchParams: Promise<{ showBite?: string; showSplit?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -136,6 +148,12 @@ export default async function DoNowPage({
             <a href="/do-now?showBite=true">
               <button type="button" className="btn-warning">Take a Bite</button>
             </a>
+            {/* Added Split and Kick Button */}
+            {projectId && (
+              <a href="/do-now?showSplit=true">
+                <button type="button" className="btn-secondary" style={{ backgroundColor: '#6c757d', color: 'white' }}>Split & Kick</button>
+              </a>
+            )}
           </div>
         </div>
       </section>
@@ -156,6 +174,34 @@ export default async function DoNowPage({
             </div>
             <div className="form-actions">
               <button type="submit" formAction={handleTakeABite} className="btn-primary">Submit</button>
+              <a href="/do-now">
+                <button type="button" className="btn-secondary">Cancel</button>
+              </a>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {/* Split and Kick Form */}
+      {params.showSplit === 'true' && (
+        <section className="section" style={{ borderLeft: '4px solid #6c757d' }}>
+          <div className="section-header">
+            <h2 className="section-title">Split & Kick</h2>
+            <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+              Split this task: do the first part now, kick the rest to the end of the project list (Inactive).
+            </p>
+          </div>
+          <form>
+            <div className="form-group">
+              <label htmlFor="text1">Current Item (Do this now)</label>
+              <input id="text1" name="text1" type="text" defaultValue={itemName} required placeholder="Edit current item" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="text2">New Item (Kick to end of project)</label>
+              <input id="text2" name="text2" type="text" required placeholder="Enter new item" />
+            </div>
+            <div className="form-actions">
+              <button type="submit" formAction={handleSplitAndKick} className="btn-primary">Submit</button>
               <a href="/do-now">
                 <button type="button" className="btn-secondary">Cancel</button>
               </a>
